@@ -18,14 +18,17 @@ import static org.apache.curator.shaded.com.google.common.base.Preconditions.che
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import io.prometheus.client.Histogram;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpExchange;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
 import io.streamnative.pulsar.handlers.amqp.AmqpExchangeReplicator;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueue;
+import io.streamnative.pulsar.handlers.amqp.metcis.ExchangeMetrics;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +47,7 @@ import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.impl.MessageImpl;
+import org.apache.pulsar.common.api.proto.CommandSubscribe;
 import org.apache.pulsar.common.api.proto.KeyValue;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
@@ -66,8 +70,10 @@ public class PersistentExchange extends AbstractAmqpExchange {
     private final ConcurrentOpenHashMap<String, ManagedCursor> cursors;
     private AmqpExchangeReplicator messageReplicator;
     private AmqpEntryWriter amqpEntryWriter;
+    private ExchangeMetrics exchangeMetrics;
 
-    public PersistentExchange(String exchangeName, Type type, PersistentTopic persistentTopic, boolean autoDelete) {
+    public PersistentExchange(String exchangeName, Type type, PersistentTopic persistentTopic, boolean autoDelete,
+                              ExchangeMetrics exchangeMetrics) {
         super(exchangeName, type, new HashSet<>(), true, autoDelete);
         this.persistentTopic = persistentTopic;
         topicNameValidate();
@@ -82,7 +88,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
         if (messageReplicator == null) {
             messageReplicator = new AmqpExchangeReplicator(this) {
                 @Override
-                public CompletableFuture<Void> readProcess(Entry entry) {
+                public CompletableFuture<Void> readProcess(Entry entry, Position position) {
                     Map<String, Object> props;
                     try {
                         MessageImpl<byte[]> message = MessageImpl.deserialize(entry.getDataBuffer());
@@ -92,25 +98,43 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         log.error("Deserialize entry dataBuffer failed. exchangeName: {}", exchangeName, e);
                         return FutureUtil.failedFuture(e);
                     }
-                    List<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
+                    exchangeMetrics.routeInc();
+                    Histogram.Timer routeTimer = exchangeMetrics.startRoute();
+                    Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
                     for (AmqpQueue queue : queues) {
                         CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
-                                entry.getLedgerId(), entry.getEntryId(),
+                                position.getLedgerId(), position.getEntryId(),
                                 props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
                                 props);
                         routeFutureList.add(routeFuture);
                     }
-                    return FutureUtil.waitForAll(routeFutureList);
+                    return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
+                        if (t != null) {
+                            exchangeMetrics.routeFailedInc();
+                            return;
+                        }
+                        exchangeMetrics.finishRoute(routeTimer);
+                    });
                 }
             };
             messageReplicator.startReplicate();
         }
         this.amqpEntryWriter = new AmqpEntryWriter(persistentTopic);
+        this.exchangeMetrics = exchangeMetrics;
     }
 
     @Override
     public CompletableFuture<Position> writeMessageAsync(Message<byte[]> message, String routingKey) {
-        return amqpEntryWriter.publishMessage(message);
+        exchangeMetrics.writeInc();
+        Histogram.Timer writeTimer = exchangeMetrics.startWrite();
+        return amqpEntryWriter.publishMessage(message).whenComplete((__, t) -> {
+            if (t != null) {
+                exchangeMetrics.writeFailed();
+                return;
+            }
+            exchangeMetrics.writeSuccessInc();
+            exchangeMetrics.finishWrite(writeTimer);
+        });
     }
 
     @Override
@@ -120,7 +144,8 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Entry> readEntryAsync(String queueName, Position position) {
-        CompletableFuture<Entry> future = new CompletableFuture();
+        exchangeMetrics.readInc();
+        CompletableFuture<Entry> future = new CompletableFuture<>();
         // TODO Temporarily put the creation operation here, and later put the operation in router
         ManagedCursor cursor = cursors.get(queueName);
         if (cursor == null) {
@@ -128,15 +153,17 @@ public class PersistentExchange extends AbstractAmqpExchange {
             return future;
         }
         ManagedLedgerImpl ledger = (ManagedLedgerImpl) cursor.getManagedLedger();
-
+        Histogram.Timer readTimer = exchangeMetrics.startRead();
         ledger.asyncReadEntry((PositionImpl) position, new AsyncCallbacks.ReadEntryCallback() {
                 @Override
                 public void readEntryComplete(Entry entry, Object o) {
+                    exchangeMetrics.finishRead(readTimer);
                     future.complete(entry);
                 }
 
                 @Override
                 public void readEntryFailed(ManagedLedgerException e, Object o) {
+                    exchangeMetrics.readFailed();
                     future.completeExceptionally(e);
                 }
             }
@@ -151,6 +178,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> markDeleteAsync(String queueName, Position position) {
+        exchangeMetrics.ackInc();
         CompletableFuture<Void> future = new CompletableFuture();
         ManagedCursor cursor = cursors.get(queueName);
         if (cursor == null) {
@@ -172,8 +200,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
             @Override
             public void markDeleteFailed(ManagedLedgerException e, Object ctx) {
-                log.warn("Mark delete success for position: {} with error:",
-                    position, e);
+                if (((PositionImpl) position).compareTo((PositionImpl) cursor.getMarkDeletedPosition()) < 0) {
+                    log.warn("Mark delete failed for position: {}, {}", position, e.getMessage());
+                } else {
+                    log.error("Mark delete failed for position: {}", position, e);
+                }
                 future.completeExceptionally(e);
             }
         }, null);
@@ -245,9 +276,9 @@ public class PersistentExchange extends AbstractAmqpExchange {
             }
             ManagedCursor newCursor;
             try {
-                //newCursor = ledger.openCursor(name, CommandSubscribe.InitialPosition.Latest);
-                newCursor = ledger.newNonDurableCursor(ledger.getLastConfirmedEntry(), name);
-            } catch (ManagedLedgerException e) {
+                newCursor = ledger.openCursor(name, CommandSubscribe.InitialPosition.Latest);
+//                newCursor = ledger.newNonDurableCursor(ledger.getLastConfirmedEntry(), name);
+            } catch (Exception e) {
                 log.error("Error new cursor for topic {} - {}. will cause fetch data error.",
                     persistentTopic.getName(), e);
                 return null;

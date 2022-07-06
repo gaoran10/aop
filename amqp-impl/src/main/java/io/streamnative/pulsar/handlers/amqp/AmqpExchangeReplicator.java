@@ -15,9 +15,16 @@ package io.streamnative.pulsar.handlers.amqp;
 
 import static org.apache.pulsar.broker.service.persistent.PersistentTopic.MESSAGE_RATE_BACKOFF_MS;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
 import io.streamnative.pulsar.handlers.amqp.impl.PersistentExchange;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -27,6 +34,8 @@ import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
+import org.apache.bookkeeper.mledger.Position;
+import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.impl.Backoff;
 import org.apache.pulsar.common.api.proto.CommandSubscribe;
@@ -74,12 +83,18 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     private final Backoff readFailureBackoff = new Backoff(
             1, TimeUnit.SECONDS, 1, TimeUnit.MINUTES, 0, TimeUnit.MILLISECONDS);
 
+    private final ScheduledExecutorService markDeleteExecutor = Executors.newSingleThreadScheduledExecutor(
+            new DefaultThreadFactory("router-mark-delete"));
+    private final ConcurrentLinkedDeque<Position> markDeletePositionDeque = new ConcurrentLinkedDeque<>();
+
     protected AmqpExchangeReplicator(PersistentExchange persistentExchange) {
         this.persistentExchange = persistentExchange;
         this.topic = (PersistentTopic) persistentExchange.getTopic();
         this.scheduledExecutorService = topic.getBrokerService().executor();
         STATE_UPDATER.set(this, AmqpExchangeReplicator.State.Stopped);
         this.name = "[AMQP Replicator for " + topic.getName() + " ]";
+        markDeleteExecutor.scheduleAtFixedRate(
+                this::markDeletePositions, 100, 100, TimeUnit.MILLISECONDS);
     }
 
     public void startReplicate() {
@@ -192,39 +207,32 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
             log.debug("{} Read entries complete. Entries size: {}", name, list.size());
         }
         for (Entry entry : list) {
-            try {
-                PENDING_SIZE_UPDATER.incrementAndGet(this);
-                CompletableFuture<Void> completableFuture = readProcess(entry);
-                completableFuture.whenComplete((ignored, exception) -> {
-                    if (exception != null) {
-                        log.error("{} Error producing messages", name, exception);
-                        AmqpExchangeReplicator.this.cursor.rewind();
-                    } else {
-                        if (log.isDebugEnabled()) {
-                            log.debug("{} Route message successfully.", name);
-                        }
-                        AmqpExchangeReplicator.this.cursor
-                                .asyncDelete(entry.getPosition(), this, entry.getPosition());
+            PENDING_SIZE_UPDATER.incrementAndGet(this);
+            final PositionImpl position = PositionImpl.get(entry.getLedgerId(), entry.getEntryId());
+            readProcess(entry, position).whenCompleteAsync((ignored, exception) -> {
+                if (exception != null) {
+                    log.error("{} Error producing messages", name, exception);
+                    markDeletePositions();
+                    this.cursor.rewind();
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug("{} Route message successfully.", name);
                     }
-                    entry.release();
+                    this.markDeletePositionDeque.add(position);
+                }
 
-                    int pending = PENDING_SIZE_UPDATER.decrementAndGet(this);
-                    if (pending == 0 && HAVE_PENDING_READ_UPDATER.get(this) == FALSE) {
-                        AmqpExchangeReplicator.this.readMoreEntries();
-                    }
-                });
-            } catch (Exception e) {
-                PENDING_SIZE_UPDATER.decrementAndGet(this);
-                log.warn("Route message failed.", e);
-            }
+                if (PENDING_SIZE_UPDATER.decrementAndGet(this) == 0
+                        && HAVE_PENDING_READ_UPDATER.get(this) == FALSE) {
+                    this.readMoreEntries();
+                }
+            });
+            entry.release();
         }
 
         HAVE_PENDING_READ_UPDATER.set(this, FALSE);
-
-        readMoreEntries();
     }
 
-    public abstract CompletableFuture<Void> readProcess(Entry entry);
+    public abstract CompletableFuture<Void> readProcess(Entry entry, Position position);
 
     @Override
     public void readEntriesFailed(ManagedLedgerException exception, Object o) {
@@ -245,15 +253,17 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     }
 
     @Override
-    public void deleteComplete(Object position) {
+    public void deleteComplete(Object positions) {
         if (log.isDebugEnabled()) {
-            log.debug("{} Deleted message at {}", name, position);
+            log.debug("{} Deleted message at {}", name, positions);
         }
     }
 
     @Override
-    public void deleteFailed(ManagedLedgerException e, Object position) {
-        log.error("{} Failed to delete message at {}: {}", name, position, e.getMessage(), e);
+    public void deleteFailed(ManagedLedgerException e, Object positions) {
+        log.error("{} Failed to delete message at {}: {}", name, positions, e.getMessage(), e);
+        markDeletePositions();
+        this.cursor.rewind();
     }
 
     public void stopReplicate() {
@@ -271,6 +281,10 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (cursor != null && (STATE_UPDATER.compareAndSet(this, State.Starting, State.Stopping)
                 || STATE_UPDATER.compareAndSet(this, State.Started, State.Stopping))) {
             cursor.setInactive();
+            if (!this.markDeleteExecutor.isShutdown() && !this.markDeleteExecutor.isTerminated()) {
+                markDeletePositions();
+                this.markDeleteExecutor.shutdown();
+            }
             cursor.asyncClose(new AsyncCallbacks.CloseCallback() {
                 @Override
                 public void closeComplete(Object o) {
@@ -296,6 +310,22 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         }
 
         log.info("[{}] AMQP Exchange Replicator is already stopped. State: {}", name, STATE_UPDATER.get(this));
+    }
+
+    private synchronized void markDeletePositions() {
+        if (markDeletePositionDeque.isEmpty()) {
+            return;
+        }
+        int size = markDeletePositionDeque.size();
+        List<Position> positions = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            Position position = markDeletePositionDeque.pollFirst();
+            if (position == null) {
+                break;
+            }
+            positions.add(position);
+        }
+        this.cursor.asyncDelete(positions, this, positions);
     }
 
 }

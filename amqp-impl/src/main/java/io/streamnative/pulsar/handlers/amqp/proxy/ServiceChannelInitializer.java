@@ -15,6 +15,7 @@ package io.streamnative.pulsar.handlers.amqp.proxy;
 
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import io.streamnative.pulsar.handlers.amqp.AmqpEncoder;
 
 /**
@@ -30,6 +31,7 @@ public class ServiceChannelInitializer extends ChannelInitializer<SocketChannel>
 
     @Override
     protected void initChannel(SocketChannel ch) throws Exception {
+        ch.pipeline().addLast("consolidation", new FlushConsolidationHandler(1024, true));
         ch.pipeline().addLast("frameEncoder",
                 new AmqpEncoder());
         ch.pipeline().addLast("handler",

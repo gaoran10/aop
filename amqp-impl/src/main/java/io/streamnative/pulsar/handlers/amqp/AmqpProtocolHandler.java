@@ -19,6 +19,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.prometheus.client.Counter;
 import io.streamnative.pulsar.handlers.amqp.proxy.ProxyConfiguration;
 import io.streamnative.pulsar.handlers.amqp.proxy.ProxyService;
 import io.streamnative.pulsar.handlers.amqp.utils.ConfigurationUtils;
@@ -30,6 +31,8 @@ import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.ServiceConfigurationUtils;
 import org.apache.pulsar.broker.protocol.ProtocolHandler;
 import org.apache.pulsar.broker.service.BrokerService;
+import org.apache.pulsar.broker.stats.prometheus.PrometheusRawMetricsProvider;
+import org.apache.pulsar.common.util.SimpleTextOutputStream;
 import org.apache.pulsar.policies.data.loadbalancer.AdvertisedListener;
 
 /**
@@ -88,7 +91,7 @@ public class AmqpProtocolHandler implements ProtocolHandler {
     @Override
     public void start(BrokerService service) {
         brokerService = service;
-        amqpBrokerService = new AmqpBrokerService(service.getPulsar());
+        amqpBrokerService = new AmqpBrokerService(service.getPulsar(), amqpConfig.isAmqpEnableMetrics());
         if (amqpConfig.isAmqpProxyEnable()) {
             ProxyConfiguration proxyConfig = new ProxyConfiguration();
             proxyConfig.setAmqpTenant(amqpConfig.getAmqpTenant());
@@ -97,7 +100,7 @@ public class AmqpProtocolHandler implements ProtocolHandler {
             proxyConfig.setAmqpHeartBeat(amqpConfig.getAmqpHeartBeat());
             proxyConfig.setAmqpProxyPort(amqpConfig.getAmqpProxyPort());
 
-            AdvertisedListener internalListener = ServiceConfigurationUtils.getInternalListener(amqpConfig);
+            AdvertisedListener internalListener = ServiceConfigurationUtils.getInternalListener(amqpConfig, "pulsar");
             checkArgument(internalListener.getBrokerServiceUrl() != null,
                     "plaintext must be configured on internal listener");
             proxyConfig.setBrokerServiceURL(internalListener.getBrokerServiceUrl().toString());
@@ -110,6 +113,7 @@ public class AmqpProtocolHandler implements ProtocolHandler {
                 log.error("Failed to start amqp proxy service.");
             }
         }
+        brokerService.getPulsar().addPrometheusRawMetricsProvider(stream -> amqpBrokerService.getAmqpStats().collect());
 
         log.info("Starting AmqpProtocolHandler, listener: {}, aop version is: '{}'",
                 getAppliedAmqpListeners(amqpConfig), AopVersion.getVersion());

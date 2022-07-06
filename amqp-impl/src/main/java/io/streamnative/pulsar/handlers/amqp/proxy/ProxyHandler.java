@@ -23,8 +23,10 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
+import io.netty.util.concurrent.GenericFutureListener;
 import io.streamnative.pulsar.handlers.amqp.AmqpClientDecoder;
 import io.streamnative.pulsar.handlers.amqp.AmqpEncoder;
 import java.util.List;
@@ -70,6 +72,7 @@ public class ProxyHandler {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast("consolidation", new FlushConsolidationHandler(1024, true));
                         ch.pipeline().addLast("frameEncoder", new AmqpEncoder());
                         ch.pipeline().addLast("processor", new ProxyBackendHandler(responseBody));
                     }
@@ -120,9 +123,13 @@ public class ProxyHandler {
             super.channelActive(ctx);
             for (Object msg : connectMsgList) {
                 ((ByteBuf) msg).retain();
-                brokerChannel.writeAndFlush(msg).syncUninterruptibly();
+                brokerChannel.writeAndFlush(msg).addListener(new GenericFutureListener<Future<? super Void>>() {
+                    @Override
+                    public void operationComplete(Future<? super Void> future) throws Exception {
+                        brokerChannel.read();
+                    }
+                });
             }
-            brokerChannel.read();
         }
 
         @Override
@@ -201,7 +208,7 @@ public class ProxyHandler {
             if (log.isDebugEnabled()) {
                 log.debug("ProxyBackendHandler [receiveConnectionOpenOk]");
             }
-            proxyConnection.writeFrame(connectResponseBody.generateFrame(0));
+            proxyConnection.writeAndFlushFrame(connectResponseBody.generateFrame(0));
             state = State.Connected;
         }
 

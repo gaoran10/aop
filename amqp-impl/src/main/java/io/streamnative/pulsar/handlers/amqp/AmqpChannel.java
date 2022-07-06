@@ -116,7 +116,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
      * The delivery tag is unique per channel. This is pre-incremented before putting into the deliver frame so that
      * value of this represents the <b>last</b> tag sent out.
      */
-    private volatile long deliveryTag = 0;
+    private volatile AtomicLong deliveryTag = new AtomicLong(0);
     private final AmqpFlowCreditManager creditManager;
     private final AtomicBoolean blockedOnCredit = new AtomicBoolean(false);
     public static final int DEFAULT_CONSUMER_PERMIT = 1000;
@@ -149,7 +149,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
 
         // We don't implement access control class, but to keep clients happy that expect it always use the "0" ticket.
         AccessRequestOkBody response = methodRegistry.createAccessRequestOkBody(0);
-        connection.writeFrame(response.generateFrame(channelId));
+        connection.writeAndFlushFrame(response.generateFrame(channelId));
 
     }
 
@@ -213,7 +213,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
         MethodRegistry methodRegistry = connection.getMethodRegistry();
         AMQMethodBody responseBody = methodRegistry.createBasicQosOkBody();
-        connection.writeFrame(responseBody.generateFrame(getChannelId()));
+        connection.writeAndFlushFrame(responseBody.generateFrame(getChannelId()));
     }
 
     @Override
@@ -270,7 +270,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
 
         CompletableFuture<Subscription> subscriptionFuture = topic.createSubscription(
-                defaultSubscription, CommandSubscribe.InitialPosition.Earliest, false);
+                defaultSubscription, CommandSubscribe.InitialPosition.Earliest, false, null);
         subscriptionFuture.thenAccept(subscription -> {
             AmqpConsumer consumer;
             try {
@@ -293,7 +293,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                 AMQMethodBody responseBody = methodRegistry.
                         createBasicConsumeOkBody(AMQShortString.
                                 createAMQShortString(consumer.getConsumerTag()));
-                connection.writeFrame(responseBody.generateFrame(channelId));
+                connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
             }
             exceptionFuture.complete(null);
         });
@@ -309,7 +309,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         if (!noWait) {
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             BasicCancelOkBody cancelOkBody = methodRegistry.createBasicCancelOkBody(consumerTag);
-            connection.writeFrame(cancelOkBody.generateFrame(channelId));
+            connection.writeAndFlushFrame(cancelOkBody.generateFrame(channelId));
         }
     }
 
@@ -390,7 +390,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                         try {
                             if (subscription == null) {
                                 subscription = topic.createSubscription(defaultSubscription,
-                                        CommandSubscribe.InitialPosition.Earliest, false).get();
+                                        CommandSubscribe.InitialPosition.Earliest, false, null).get();
                             }
                             consumer = new AmqpPullConsumer(queueContainer, subscription,
                                     CommandSubscribe.SubType.Shared,
@@ -419,7 +419,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
         // TODO channelFlow process
         ChannelFlowOkBody body = connection.getMethodRegistry().createChannelFlowOkBody(true);
-        connection.writeFrame(body.generateFrame(channelId));
+        connection.writeAndFlushFrame(body.generateFrame(channelId));
     }
 
     @Override
@@ -438,7 +438,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         // TODO Process outstanding client requests
         processAsync();
         connection.closeChannel(this);
-        connection.writeFrame(new AMQFrame(getChannelId(), connection.getMethodRegistry().createChannelCloseOkBody()));
+        connection.writeAndFlushFrame(new AMQFrame(getChannelId(), connection.getMethodRegistry().createChannelCloseOkBody()));
     }
 
     @Override
@@ -558,7 +558,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                             confirmedMessageCounter++;
                             BasicAckBody body = connection.getMethodRegistry().
                                     createBasicAckBody(confirmedMessageCounter, false);
-                            connection.writeFrame(body.generateFrame(channelId));
+                            connection.writeAndFlushFrame(body.generateFrame(channelId));
                         }
                         return position;
                     })).exceptionally(throwable -> {
@@ -610,7 +610,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         if (sync) {
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             AMQMethodBody recoverOk = methodRegistry.createBasicRecoverSyncOkBody();
-            connection.writeFrame(recoverOk.generateFrame(getChannelId()));
+            connection.writeAndFlushFrame(recoverOk.generateFrame(getChannelId()));
         }
     }
 
@@ -663,7 +663,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
         // TODO txSelect process
         TxSelectOkBody txSelectOkBody = connection.getMethodRegistry().createTxSelectOkBody();
-        connection.writeFrame(txSelectOkBody.generateFrame(channelId));
+        connection.writeAndFlushFrame(txSelectOkBody.generateFrame(channelId));
     }
 
     @Override
@@ -673,7 +673,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
         // TODO txCommit process
         TxCommitOkBody txCommitOkBody = connection.getMethodRegistry().createTxCommitOkBody();
-        connection.writeFrame(txCommitOkBody.generateFrame(channelId));
+        connection.writeAndFlushFrame(txCommitOkBody.generateFrame(channelId));
     }
 
     @Override
@@ -683,7 +683,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         }
         // TODO txRollback process
         TxRollbackOkBody txRollbackBody = connection.getMethodRegistry().createTxRollbackOkBody();
-        connection.writeFrame(txRollbackBody.generateFrame(channelId));
+        connection.writeAndFlushFrame(txRollbackBody.generateFrame(channelId));
     }
 
     @Override
@@ -694,7 +694,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         confirmOnPublish = true;
 
         if (!nowait) {
-            connection.writeFrame(new AMQFrame(channelId, ConfirmSelectOkBody.INSTANCE));
+            connection.writeAndFlushFrame(new AMQFrame(channelId, ConfirmSelectOkBody.INSTANCE));
         }
     }
 
@@ -752,7 +752,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
     }
 
     public long getNextDeliveryTag() {
-        return ++deliveryTag;
+        return deliveryTag.incrementAndGet();
     }
 
     public AmqpConnection getConnection() {

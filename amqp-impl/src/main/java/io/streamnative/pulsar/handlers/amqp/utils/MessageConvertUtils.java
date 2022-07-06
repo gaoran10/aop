@@ -90,8 +90,7 @@ public final class MessageConvertUtils {
     // convert qpid IncomingMessage to Pulsar MessageImpl
     public static MessageImpl<byte[]> toPulsarMessage(IncomingMessage incomingMessage)
             throws UnsupportedEncodingException {
-        @SuppressWarnings("unchecked")
-        TypedMessageBuilderImpl<byte[]> builder = new TypedMessageBuilderImpl(null, Schema.BYTES);
+        TypedMessageBuilderImpl<byte[]> builder = new TypedMessageBuilderImpl<>(null, Schema.BYTES);
 
         // value
         if (incomingMessage.getBodyCount() > 0) {
@@ -145,7 +144,7 @@ public final class MessageConvertUtils {
         return (MessageImpl<byte[]>) builder.getMessage();
     }
 
-    private void setProp(TypedMessageBuilder builder, String propName, Object value)
+    private void setProp(TypedMessageBuilder<byte[]> builder, String propName, Object value)
             throws UnsupportedEncodingException {
         if (value != null) {
             if (value instanceof Byte) {

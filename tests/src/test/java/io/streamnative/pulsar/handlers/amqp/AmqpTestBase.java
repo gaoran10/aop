@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import com.rabbitmq.client.impl.OAuth2ClientCredentialsGrantCredentialsProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
@@ -113,11 +115,11 @@ public class AmqpTestBase extends AmqpProtocolHandlerTestBase {
         channel.queueDeclare(queueName, true, false, false, null);
         channel.queueBind(queueName, exchangeName, routingKey);
 
-        int messageCnt = 100;
+        int messageCnt = 10000;
         CountDownLatch countDownLatch = new CountDownLatch(messageCnt);
 
         AtomicInteger consumeIndex = new AtomicInteger(0);
-        channel.basicConsume(queueName, false, "", false, exclusiveConsume, null,
+        channel.basicConsume(queueName, true, "", false, exclusiveConsume, null,
                 new DefaultConsumer(channel) {
                     @Override
                     public void handleDelivery(String consumerTag,
@@ -125,9 +127,11 @@ public class AmqpTestBase extends AmqpProtocolHandlerTestBase {
                                                AMQP.BasicProperties properties,
                                                byte[] body) throws IOException {
                         long deliveryTag = envelope.getDeliveryTag();
-                        Assert.assertEquals(new String(body), "Hello, world! - " + consumeIndex.getAndIncrement());
+//                        Assert.assertEquals(new String(body), "Hello, world! - " + consumeIndex.getAndIncrement());
+                        System.out.println("receive msg: " + new String(body));
+                        consumeIndex.incrementAndGet();
                         // (process the message components here ...)
-                        channel.basicAck(deliveryTag, false);
+//                        channel.basicAck(deliveryTag, false);
                         countDownLatch.countDown();
                     }
                 });
