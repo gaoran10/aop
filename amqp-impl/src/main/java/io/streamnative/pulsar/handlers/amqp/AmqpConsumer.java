@@ -19,6 +19,7 @@ import io.netty.util.concurrent.Future;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ import org.apache.pulsar.broker.service.RedeliveryTracker;
 import org.apache.pulsar.broker.service.ServerCnx;
 import org.apache.pulsar.broker.service.Subscription;
 import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
+import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.common.api.proto.CommandAck;
 import org.apache.pulsar.common.api.proto.CommandSubscribe;
 import org.apache.pulsar.common.api.proto.KeySharedMeta;
@@ -119,12 +121,14 @@ public class AmqpConsumer extends Consumer {
             channel.getCreditManager().useCreditForMessages(totalMessages, 0);
             if (!channel.getCreditManager().hasCredit()) {
                 channel.setBlockedOnCredit();
+                log.info("[{}] channel block on credit for {} {}-{}",
+                        channel.getChannelId(), totalMessages, getSubscription().getTopic().getName(), queueName);
             }
         }
         final AmqpConnection connection = channel.getConnection();
         MESSAGE_PERMITS_UPDATER.addAndGet(this, -totalMessages);
         connection.ctx.channel().eventLoop().execute(() -> {
-            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            Collection<CompletableFuture<Void>> futures = new ArrayList<>();
             for (Entry index : entries) {
                 if (index == null) {
                     // Entry was filtered out
@@ -135,7 +139,7 @@ public class AmqpConsumer extends Consumer {
                 IndexMessage indexMessage = MessageConvertUtils.entryToIndexMessage(index);
                 asyncGetQueue().thenApply(amqpQueue -> amqpQueue.readEntryAsync(
                         indexMessage.getExchangeName(), indexMessage.getLedgerId(), indexMessage.getEntryId())
-                        .whenComplete((msg, ex) -> {
+                        .whenCompleteAsync((msg, ex) -> {
                             try {
                                 if (ex == null) {
                                     long deliveryTag = channel.getNextDeliveryTag();
@@ -164,6 +168,8 @@ public class AmqpConsumer extends Consumer {
                                     }
                                 } else {
                                     log.error("Failed to read entries data.", ex);
+                                    channel.getCreditManager().restoreCredit(1, 0);
+                                    incrementPermits(1);
                                     sendFuture.completeExceptionally(ex);
                                 }
                             } finally {
@@ -175,7 +181,7 @@ public class AmqpConsumer extends Consumer {
                             log.error("Failed to get queue from queue container", throwable);
                             sendFuture.completeExceptionally(throwable);
                             return null;
-                }).join();
+                });
             }
             FutureUtil.waitForAll(futures).whenComplete((ignored, throwable) -> {
                 if (throwable != null) {
@@ -244,10 +250,10 @@ public class AmqpConsumer extends Consumer {
     @Override
     public int getAvailablePermits() {
         if (autoAck || channel.getCreditManager().isNoCreditLimit()) {
-            return availablePermits;
+            return Math.max(availablePermits, 1);
         }
         return this.channel.getCreditManager().hasCredit()
-            ? (int) this.channel.getCreditManager().getMessageCredit() : 0;
+            ? Math.max((int) this.channel.getCreditManager().getMessageCredit(), 1) : 1;
     }
 
     @Override
@@ -273,9 +279,9 @@ public class AmqpConsumer extends Consumer {
     public void incrementPermits(int permits) {
         int var = ADD_PERMITS_UPDATER.addAndGet(this, permits);
         if (var > maxPermits / 2) {
-            MESSAGE_PERMITS_UPDATER.addAndGet(this, var);
-            this.getSubscription().consumerFlow(this, availablePermits);
+            this.getSubscription().consumerFlow(this, MESSAGE_PERMITS_UPDATER.addAndGet(this, var));
             ADD_PERMITS_UPDATER.set(this, 0);
         }
     }
+
 }

@@ -136,7 +136,12 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         super.channelInactive(ctx);
         completeAndCloseAllChannels();
         amqpBrokerService.getConnectionContainer().removeConnection(namespaceName, this);
-        this.brokerDecoder.close();
+        if (this.brokerDecoder != null) {
+            this.brokerDecoder.close();
+            if (namespaceName != null) {
+                this.amqpBrokerService.getAmqpStats().connectionDec(namespaceName.getLocalName());
+            }
+        }
     }
 
     @Override
@@ -193,7 +198,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                         maxFrameSize,
                         heartBeat);
 
-        writeFrame(tuneBody.generateFrame(0));
+        writeAndFlushFrame(tuneBody.generateFrame(0));
         state = ConnectionState.AWAIT_TUNE_OK;
     }
 
@@ -208,7 +213,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
             methodRegistry.createConnectionTuneBody(maxChannels,
                 maxFrameSize,
                 heartBeat);
-        writeFrame(tuneBody.generateFrame(0));
+        writeAndFlushFrame(tuneBody.generateFrame(0));
         state = ConnectionState.AWAIT_TUNE_OK;
     }
 
@@ -285,10 +290,11 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         // Policies policies = getPolicies(namespaceName);
 //        if (policies != null) {
         this.namespaceName = namespaceName;
+        this.amqpBrokerService.getAmqpStats().connectionInc(namespaceName.getLocalName());
 
         MethodRegistry methodRegistry = getMethodRegistry();
         AMQMethodBody responseBody = methodRegistry.createConnectionOpenOkBody(virtualHost);
-        writeFrame(responseBody.generateFrame(0));
+        writeAndFlushFrame(responseBody.generateFrame(0));
         state = ConnectionState.OPEN;
         amqpBrokerService.getConnectionContainer().addConnection(namespaceName, this);
 //        } else {
@@ -312,7 +318,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
 
             MethodRegistry methodRegistry = getMethodRegistry();
             ConnectionCloseOkBody responseBody = methodRegistry.createConnectionCloseOkBody();
-            writeFrame(responseBody.generateFrame(0));
+            writeAndFlushFrame(responseBody.generateFrame(0));
         } catch (Exception e) {
             log.error("Error closing connection for " + this.remoteAddress.toString(), e);
         } finally {
@@ -339,7 +345,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                 markChannelAwaitingCloseOk(channelId);
                 completeAndCloseAllChannels();
             } finally {
-                writeFrame(frame);
+                writeAndFlushFrame(frame);
             }
         }
     }
@@ -368,7 +374,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
             addChannel(channel);
 
             ChannelOpenOkBody response = getMethodRegistry().createChannelOpenOkBody();
-            writeFrame(response.generateFrame(channelId));
+            writeAndFlushFrame(response.generateFrame(channelId));
         }
 
     }
@@ -406,11 +412,11 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                 // TODO temporary modification
                 "PLAIN".getBytes(US_ASCII),
                 "en_US".getBytes(US_ASCII));
-            writeFrame(responseBody.generateFrame(0));
+            writeAndFlushFrame(responseBody.generateFrame(0));
             state = ConnectionState.AWAIT_START_OK;
         } catch (Exception e) {
             log.error("Received unsupported protocol initiation for protocol version: {} ", getProtocolVersion(), e);
-            writeFrame(new ProtocolInitiation(ProtocolVersion.v0_91));
+            writeAndFlushFrame(new ProtocolInitiation(ProtocolVersion.v0_91));
             throw new RuntimeException(e);
         }
     }
@@ -494,11 +500,18 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         }
     }
 
-    public synchronized void writeFrame(AMQDataBlock frame) {
+    public synchronized void writeAndFlushFrame(AMQDataBlock frame) {
         if (log.isDebugEnabled()) {
-            log.debug("send: " + frame);
+            log.debug("write and flush frame: " + frame);
         }
         getCtx().writeAndFlush(frame);
+    }
+
+    public synchronized void writeFrame(AMQDataBlock frame) {
+        if (log.isDebugEnabled()) {
+            log.debug("write frame: " + frame);
+        }
+        getCtx().write(frame);
     }
 
     public MethodRegistry getMethodRegistry() {
@@ -544,7 +557,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                     AmqpConnection.this.close();
                 } else if (event.state().equals(IdleState.WRITER_IDLE)) {
                     log.warn("heartbeat write  idle [{}]", AmqpConnection.this.remoteAddress.toString());
-                    writeFrame(HeartbeatBody.FRAME);
+                    writeAndFlushFrame(HeartbeatBody.FRAME);
                 }
             }
 
@@ -595,7 +608,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
     }
 
     public void closeChannelAndWriteFrame(AmqpChannel channel, int cause, String message) {
-        writeFrame(new AMQFrame(channel.getChannelId(),
+        writeAndFlushFrame(new AMQFrame(channel.getChannelId(),
             getMethodRegistry().createChannelCloseBody(cause,
                 AMQShortString.validValueOf(message),
                 currentClassId,

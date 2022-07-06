@@ -72,7 +72,7 @@ public class QueueServiceImpl implements QueueService {
 
                     MethodRegistry methodRegistry = connection.getMethodRegistry();
                     QueueDeclareOkBody responseBody = methodRegistry.createQueueDeclareOkBody(finalQueue, 0, 0);
-                    connection.writeFrame(responseBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 }
             }
         });
@@ -190,7 +190,7 @@ public class QueueServiceImpl implements QueueService {
                                 amqpExchange.getTopic().delete().get();
                             }
                             AMQMethodBody responseBody = connection.getMethodRegistry().createQueueUnbindOkBody();
-                            connection.writeFrame(responseBody.generateFrame(channelId));
+                            connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                         } catch (Exception e) {
                             connection.sendConnectionClose(INTERNAL_ERROR,
                                     "unbind failed:" + e.getMessage(), channelId);
@@ -212,7 +212,7 @@ public class QueueServiceImpl implements QueueService {
 
         MethodRegistry methodRegistry = connection.getMethodRegistry();
         AMQMethodBody responseBody = methodRegistry.createQueuePurgeOkBody(0);
-        connection.writeFrame(responseBody.generateFrame(channelId));
+        connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
     }
 
     private void delete(AmqpChannel channel, AmqpQueue amqpQueue) {
@@ -227,7 +227,7 @@ public class QueueServiceImpl implements QueueService {
 
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             QueueDeleteOkBody responseBody = methodRegistry.createQueueDeleteOkBody(0);
-            connection.writeFrame(responseBody.generateFrame(channelId));
+            connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }
     }
 
@@ -265,7 +265,7 @@ public class QueueServiceImpl implements QueueService {
                             bindingKey, arguments);
                     MethodRegistry methodRegistry = connection.getMethodRegistry();
                     AMQMethodBody responseBody = methodRegistry.createQueueBindOkBody();
-                    connection.writeFrame(responseBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 } catch (Exception e) {
                     log.warn("Failed to bind queue[{}] with exchange[{}].", amqpQueue.getName(), exchange, e);
                     connection.sendConnectionClose(INTERNAL_ERROR,

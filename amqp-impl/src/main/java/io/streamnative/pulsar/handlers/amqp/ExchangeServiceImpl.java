@@ -95,7 +95,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                                         + exchangeName + "' of type " + amqpExchange.getType()
                                         + " to " + type + ".", channelId);
                     } else if (!nowait) {
-                        connection.writeFrame(declareOkBody.generateFrame(channelId));
+                        connection.writeAndFlushFrame(declareOkBody.generateFrame(channelId));
                     }
                 }
             }
@@ -136,7 +136,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                                 topic.delete().get();
                                 ExchangeDeleteOkBody responseBody = connection.getMethodRegistry().
                                         createExchangeDeleteOkBody();
-                                connection.writeFrame(responseBody.generateFrame(channelId));
+                                connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                             } catch (Exception e) {
                                 connection.sendConnectionClose(INTERNAL_ERROR,
                                         "Catch a PulsarAdminException: " + e.getMessage()
@@ -185,7 +185,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                 MethodRegistry methodRegistry = connection.getMethodRegistry();
                 ExchangeBoundOkBody exchangeBoundOkBody = methodRegistry
                         .createExchangeBoundOkBody(replyCode, AMQShortString.validValueOf(replyText));
-                connection.writeFrame(exchangeBoundOkBody.generateFrame(channelId));
+                connection.writeAndFlushFrame(exchangeBoundOkBody.generateFrame(channelId));
             }
         });
     }

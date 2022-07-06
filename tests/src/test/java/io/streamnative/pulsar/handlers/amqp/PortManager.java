@@ -13,6 +13,8 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import org.apache.pulsar.common.naming.NamespaceName;
+
 import java.net.ServerSocket;
 
 /**

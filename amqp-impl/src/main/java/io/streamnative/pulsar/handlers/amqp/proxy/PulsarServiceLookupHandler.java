@@ -65,7 +65,7 @@ public class PulsarServiceLookupHandler implements LookupHandler, Closeable {
                         "Unable to resolve the broker for the topic: " + topicName));
                 return;
             }
-            String hostAndPort = result.getLeft().toString();
+            String hostAndPort = result.getLeft().getHostName() + ":" + result.getLeft().getPort();
 
             // fetch the protocol handler data
             List<LoadManagerReport> brokers = metadataStoreCacheLoader.getAvailableBrokers();

@@ -174,7 +174,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
                     // TODO temporary modification
                     "PLAIN".getBytes(US_ASCII),
                     "en_US".getBytes(US_ASCII));
-            writeFrame(responseBody.generateFrame(0));
+            writeAndFlushFrame(responseBody.generateFrame(0));
         } catch (QpidException e) {
             log.error("Received unsupported protocol initiation for protocol version: {} ", getProtocolVersion(), e);
         }
@@ -192,7 +192,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         ConnectionTuneBody tuneBody =
                 methodRegistry.createConnectionTuneBody(proxyConfig.getAmqpMaxNoOfChannels(),
                         proxyConfig.getAmqpMaxFrameSize(), proxyConfig.getAmqpHeartBeat());
-        writeFrame(tuneBody.generateFrame(0));
+        writeAndFlushFrame(tuneBody.generateFrame(0));
     }
 
     // step 3
@@ -204,7 +204,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         ConnectionTuneBody tuneBody =
                 methodRegistry.createConnectionTuneBody(proxyConfig.getAmqpMaxNoOfChannels(),
                         proxyConfig.getAmqpMaxFrameSize(), proxyConfig.getAmqpHeartBeat());
-        writeFrame(tuneBody.generateFrame(0));
+        writeAndFlushFrame(tuneBody.generateFrame(0));
     }
 
     // step 4
@@ -372,7 +372,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         return false;
     }
 
-    public synchronized void writeFrame(AMQDataBlock frame) {
+    public synchronized void writeAndFlushFrame(AMQDataBlock frame) {
         if (log.isDebugEnabled()) {
             log.debug("send: " + frame);
         }
