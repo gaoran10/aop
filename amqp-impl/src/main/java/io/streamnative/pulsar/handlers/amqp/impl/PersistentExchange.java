@@ -18,6 +18,7 @@ import static org.apache.curator.shaded.com.google.common.base.Preconditions.che
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.google.common.collect.Sets;
 import io.prometheus.client.Histogram;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpExchange;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
@@ -30,7 +31,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -74,7 +74,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     public PersistentExchange(String exchangeName, Type type, PersistentTopic persistentTopic, boolean autoDelete,
                               ExchangeMetrics exchangeMetrics) {
-        super(exchangeName, type, new HashSet<>(), true, autoDelete);
+        super(exchangeName, type, Sets.newConcurrentHashSet(), true, autoDelete);
         this.persistentTopic = persistentTopic;
         topicNameValidate();
         updateExchangeProperties();
