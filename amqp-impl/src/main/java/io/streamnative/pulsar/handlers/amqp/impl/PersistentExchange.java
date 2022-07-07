@@ -28,14 +28,14 @@ import io.streamnative.pulsar.handlers.amqp.AmqpQueue;
 import io.streamnative.pulsar.handlers.amqp.metcis.ExchangeMetrics;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.Entry;
@@ -105,12 +105,24 @@ public class PersistentExchange extends AbstractAmqpExchange {
                     exchangeMetrics.routeInc();
                     Histogram.Timer routeTimer = exchangeMetrics.startRoute();
                     Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
-                    for (AmqpQueue queue : queues) {
-                        CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
-                                position.getLedgerId(), position.getEntryId(),
-                                props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
-                                props);
-                        routeFutureList.add(routeFuture);
+                    String bindingKey = props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
+                    if (exchangeType == Type.Direct) {
+                        Set<AmqpQueue> queueSet = bindingKeyQueueMap.get(bindingKey);
+                        for (AmqpQueue queue : queueSet) {
+                            CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
+                                    position.getLedgerId(), position.getEntryId(),
+                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                    props);
+                            routeFutureList.add(routeFuture);
+                        }
+                    } else {
+                        for (AmqpQueue queue : queues) {
+                            CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
+                                    position.getLedgerId(), position.getEntryId(),
+                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                    props);
+                            routeFutureList.add(routeFuture);
+                        }
                     }
                     return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
                         if (t != null) {
@@ -231,6 +243,20 @@ public class PersistentExchange extends AbstractAmqpExchange {
     @Override
     public void addQueue(AmqpQueue queue) {
         queues.add(queue);
+        if (exchangeType == Type.Direct) {
+            for (String bindingKey : queue.getRouter(exchangeName).getBindingKey()) {
+                bindingKeyQueueMap.compute(bindingKey, (k, v) -> {
+                    if (v == null) {
+                        Set<AmqpQueue> set = new HashSet<>();
+                        set.add(queue);
+                        return set;
+                    } else {
+                        v.add(queue);
+                        return v;
+                    }
+                });
+            }
+        }
         updateExchangeProperties();
         createCursorIfNotExists(queue.getName());
 

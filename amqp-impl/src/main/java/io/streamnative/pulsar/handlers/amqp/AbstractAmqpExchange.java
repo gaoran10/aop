@@ -13,8 +13,10 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Base class of AMQP exchange.
@@ -26,6 +28,8 @@ public abstract class AbstractAmqpExchange implements AmqpExchange {
     protected Set<AmqpQueue> queues;
     protected boolean durable;
     protected boolean autoDelete;
+    protected Map<String, Set<AmqpQueue>> bindingKeyQueueMap;
+
     public static final String DEFAULT_EXCHANGE_DURABLE = "aop.direct.durable";
 
     protected AbstractAmqpExchange(String exchangeName, AmqpExchange.Type exchangeType,
@@ -35,6 +39,9 @@ public abstract class AbstractAmqpExchange implements AmqpExchange {
         this.queues = queues;
         this.durable = durable;
         this.autoDelete = autoDelete;
+        if (this.exchangeType == Type.Direct) {
+            bindingKeyQueueMap = new ConcurrentHashMap<>();
+        }
     }
 
     @Override
