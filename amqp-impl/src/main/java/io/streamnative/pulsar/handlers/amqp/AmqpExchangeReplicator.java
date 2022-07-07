@@ -170,7 +170,6 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     }
 
     private void readMoreEntries() {
-        log.info("xxxx {} Read more entries.", name);
         if (log.isDebugEnabled()) {
             log.debug("{} Read more entries.", name);
         }
@@ -189,7 +188,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
             }
         } else {
             // no permits from rate limit
-            scheduledExecutorService.schedule(this::readMoreEntries, 1, TimeUnit.MILLISECONDS);
+            scheduledExecutorService.schedule(this::readMoreEntries, 10, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -200,11 +199,8 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                 log.debug("{} Replicator queue is full, availablePermits: {}, pause route.",
                         name, availablePermits);
             }
-            log.info("xxxx {} Replicator queue is full, availablePermits: {}, pause route.",
-                    name, availablePermits);
             return 0;
         }
-        log.info("xxxx getAvailablePermits {}", availablePermits);
         return availablePermits;
     }
 
@@ -213,20 +209,23 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (log.isDebugEnabled()) {
             log.debug("{} Read entries complete. Entries size: {}", name, list.size());
         }
+        HAVE_PENDING_READ_UPDATER.set(this, FALSE);
         readFailureBackoff.reset();
+        if (list == null || list.isEmpty()) {
+            log.warn("{} The entry list is empty. readPosition: {}, LAC: {}",
+                    name, cursor.getReadPosition(), topic.getManagedLedger().getLastConfirmedEntry());
+            scheduledExecutorService.schedule(this::readMoreEntries, 1, TimeUnit.MILLISECONDS);
+            return;
+        }
         List<Pair<PositionImpl, ByteBuf>> bufList = new ArrayList<>(list.size());
         for (Entry entry : list) {
-            entry.getDataBuffer().retain();
             bufList.add(
                     Pair.of(PositionImpl.get(entry.getLedgerId(), entry.getEntryId()), entry.getDataBuffer()));
         }
-        this.readComplete(bufList);
-//        executorService.execute(() -> this.readComplete(bufList));
+        executorService.execute(() -> this.readComplete(bufList));
     }
 
     private void readComplete(List<Pair<PositionImpl, ByteBuf>> list) {
-        log.info("xxxx {} Read entries complete. Entries size: {}", name, list.size());
-        HAVE_PENDING_READ_UPDATER.set(this, FALSE);
         for (Pair<PositionImpl, ByteBuf> entry : list) {
             PENDING_SIZE_UPDATER.incrementAndGet(this);
             readProcess(entry.getRight(), entry.getLeft()).whenCompleteAsync((ignored, exception) -> {
@@ -238,12 +237,10 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                     if (log.isDebugEnabled()) {
                         log.debug("{} Route message successfully.", name);
                     }
-                    log.info("{} Route message successfully {}.", name, entry.getLeft());
                     this.markDeletePositionDeque.add(entry.getLeft());
                 }
-                if (PENDING_SIZE_UPDATER.decrementAndGet(this) == 0
+                if (PENDING_SIZE_UPDATER.decrementAndGet(this) < replicatorQueueSize * 0.5
                         && HAVE_PENDING_READ_UPDATER.get(this) == FALSE) {
-                    log.info("xxxx read more entries after read complete");
                     this.readMoreEntries();
                 }
             });
@@ -267,7 +264,6 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (log.isDebugEnabled()) {
             log.debug("{} Read entries from bookie failed, retrying in {} s", name, waitTimeMs / 1000, exception);
         }
-        log.info("xxxx {} Read entries from bookie failed, retrying in {} s", name, waitTimeMs / 1000, exception);
         HAVE_PENDING_READ_UPDATER.set(this, FALSE);
         scheduledExecutorService.schedule(this::readMoreEntries, waitTimeMs, TimeUnit.MILLISECONDS);
     }

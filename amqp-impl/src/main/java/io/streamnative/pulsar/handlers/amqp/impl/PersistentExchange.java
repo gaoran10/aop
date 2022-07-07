@@ -112,7 +112,6 @@ public class PersistentExchange extends AbstractAmqpExchange {
                                 props);
                         routeFutureList.add(routeFuture);
                     }
-                    log.info("{} read process position {}", exchangeName, position);
                     return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
                         if (t != null) {
                             exchangeMetrics.routeFailedInc();

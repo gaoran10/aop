@@ -250,14 +250,10 @@ public class AmqpConsumer extends Consumer {
     @Override
     public int getAvailablePermits() {
         if (autoAck || channel.getCreditManager().isNoCreditLimit()) {
-            int ap = Math.max(availablePermits, 1);
-            log.info("xxxx get available permits {}", ap);
-            return ap;
+            return Math.max(availablePermits, 1);
         }
-        int credits = this.channel.getCreditManager().hasCredit()
+        return this.channel.getCreditManager().hasCredit()
                 ? Math.max((int) this.channel.getCreditManager().getMessageCredit(), 1) : 1;
-        log.info("xxxx get available credits {}", credits);
-        return credits;
     }
 
     @Override
@@ -280,12 +276,12 @@ public class AmqpConsumer extends Consumer {
         getSubscription().getDispatcher().consumerFlow(this, permits);
     }
 
-    public void incrementPermits(int permits) {
+    public synchronized void incrementPermits(int permits) {
         int var = ADD_PERMITS_UPDATER.addAndGet(this, permits);
         if (var > maxPermits / 2) {
             int flowPermits = MESSAGE_PERMITS_UPDATER.addAndGet(this, var);
-            log.info("xxxx increment consumer flow permits {}", flowPermits);
-            this.getSubscription().consumerFlow(this, flowPermits);
+            log.info("2. - - - - - incrementPermits {}, {}", queueName, flowPermits);
+            this.getSubscription().consumerFlow(this, var);
             ADD_PERMITS_UPDATER.set(this, 0);
         }
     }
