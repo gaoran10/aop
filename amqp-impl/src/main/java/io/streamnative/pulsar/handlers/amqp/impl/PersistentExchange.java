@@ -109,11 +109,9 @@ public class PersistentExchange extends AbstractAmqpExchange {
                     if (exchangeType == Type.Direct) {
                         Set<AmqpQueue> queueSet = bindingKeyQueueMap.get(bindingKey);
                         for (AmqpQueue queue : queueSet) {
-                            CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
-                                    position.getLedgerId(), position.getEntryId(),
-                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
-                                    props);
-                            routeFutureList.add(routeFuture);
+                            routeFutureList.add(
+                                    queue.writeIndexMessageAsync(
+                                            exchangeName, position.getLedgerId(), position.getEntryId()));
                         }
                     } else {
                         for (AmqpQueue queue : queues) {

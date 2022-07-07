@@ -68,8 +68,8 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         Stopped, Starting, Started, Stopping
     }
 
-    private static final int defaultReadMaxSizeBytes = 4 * 1024 * 1024;
-    private static final int replicatorQueueSize = 2000;
+    private static final int defaultReadMaxSizeBytes = 5 * 1024 * 1024;
+    private static final int replicatorQueueSize = 1000;
     private volatile int pendingQueueSize = 0;
     private static final AtomicIntegerFieldUpdater<AmqpExchangeReplicator> PENDING_SIZE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AmqpExchangeReplicator.class, "pendingQueueSize");
@@ -179,6 +179,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                 if (log.isDebugEnabled()) {
                     log.debug("{} Schedule read of {} messages.", name, availablePermits);
                 }
+                log.info("1. ================= read entries availablePermits: {}", availablePermits);
                 cursor.asyncReadEntriesOrWait(availablePermits, defaultReadMaxSizeBytes, this, null, null);
             } else {
                 if (log.isDebugEnabled()) {
@@ -226,6 +227,8 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     }
 
     private void readComplete(List<Pair<PositionImpl, ByteBuf>> list) {
+        log.info("2. ================= read complete list size {}, pendingSize: {}",
+                list.size(), PENDING_SIZE_UPDATER.get(this));
         for (Pair<PositionImpl, ByteBuf> entry : list) {
             PENDING_SIZE_UPDATER.incrementAndGet(this);
             readProcess(entry.getRight(), entry.getLeft()).whenCompleteAsync((ignored, exception) -> {
@@ -241,6 +244,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                 }
                 if (PENDING_SIZE_UPDATER.decrementAndGet(this) < replicatorQueueSize * 0.5
                         && HAVE_PENDING_READ_UPDATER.get(this) == FALSE) {
+                    log.info("3. ================= read more entries");
                     this.readMoreEntries();
                 }
             });

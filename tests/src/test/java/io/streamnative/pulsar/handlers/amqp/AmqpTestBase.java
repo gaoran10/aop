@@ -115,7 +115,7 @@ public class AmqpTestBase extends AmqpProtocolHandlerTestBase {
         channel.queueDeclare(queueName, true, false, false, null);
         channel.queueBind(queueName, exchangeName, routingKey);
 
-        int messageCnt = 100000;
+        int messageCnt = 100;
         CountDownLatch countDownLatch = new CountDownLatch(messageCnt);
 
         AtomicInteger consumeIndex = new AtomicInteger(0);
