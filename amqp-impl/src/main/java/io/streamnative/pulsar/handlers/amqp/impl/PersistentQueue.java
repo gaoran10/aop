@@ -86,6 +86,7 @@ public class PersistentQueue extends AbstractAmqpQueue {
             MessageImpl<byte[]> message = MessageConvertUtils.toPulsarMessage(indexMessage);
             return amqpEntryWriter.publishMessage(message).whenComplete((__, t) -> {
                 if (t != null) {
+                    log.error("================= Failed to publish messages queue {}.", queueName);
                     queueMetrics.writeFailed();
                     return;
                 }

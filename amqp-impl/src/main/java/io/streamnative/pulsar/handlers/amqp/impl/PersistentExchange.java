@@ -98,37 +98,37 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         }
 //                        props = message.getMessageBuilder().getPropertiesList().stream()
 //                                .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
+                        exchangeMetrics.routeInc();
+                        Histogram.Timer routeTimer = exchangeMetrics.startRoute();
+                        Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
+                        String bindingKey = props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
+                        if (exchangeType == Type.Direct) {
+                            Set<AmqpQueue> queueSet = bindingKeyQueueMap.get(bindingKey);
+                            for (AmqpQueue queue : queueSet) {
+                                routeFutureList.add(
+                                        queue.writeIndexMessageAsync(
+                                                exchangeName, position.getLedgerId(), position.getEntryId()));
+                            }
+                        } else {
+                            for (AmqpQueue queue : queues) {
+                                CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
+                                        position.getLedgerId(), position.getEntryId(),
+                                        props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                        props);
+                                routeFutureList.add(routeFuture);
+                            }
+                        }
+                        return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
+                            if (t != null) {
+                                exchangeMetrics.routeFailedInc();
+                                return;
+                            }
+                            exchangeMetrics.finishRoute(routeTimer);
+                        });
                     } catch (Exception e) {
-                        log.error("Deserialize entry dataBuffer failed. exchangeName: {}", exchangeName, e);
+                        log.error("================= Read process failed. exchangeName: {}", exchangeName, e);
                         return FutureUtil.failedFuture(e);
                     }
-                    exchangeMetrics.routeInc();
-                    Histogram.Timer routeTimer = exchangeMetrics.startRoute();
-                    Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
-                    String bindingKey = props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
-                    if (exchangeType == Type.Direct) {
-                        Set<AmqpQueue> queueSet = bindingKeyQueueMap.get(bindingKey);
-                        for (AmqpQueue queue : queueSet) {
-                            routeFutureList.add(
-                                    queue.writeIndexMessageAsync(
-                                            exchangeName, position.getLedgerId(), position.getEntryId()));
-                        }
-                    } else {
-                        for (AmqpQueue queue : queues) {
-                            CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
-                                    position.getLedgerId(), position.getEntryId(),
-                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
-                                    props);
-                            routeFutureList.add(routeFuture);
-                        }
-                    }
-                    return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
-                        if (t != null) {
-                            exchangeMetrics.routeFailedInc();
-                            return;
-                        }
-                        exchangeMetrics.finishRoute(routeTimer);
-                    });
                 }
             };
             messageReplicator.startReplicate();
