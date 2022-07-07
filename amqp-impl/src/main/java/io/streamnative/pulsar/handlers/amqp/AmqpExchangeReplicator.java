@@ -15,15 +15,15 @@ package io.streamnative.pulsar.handlers.amqp;
 
 import static org.apache.pulsar.broker.service.persistent.PersistentTopic.MESSAGE_RATE_BACKOFF_MS;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.streamnative.pulsar.handlers.amqp.impl.PersistentExchange;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +36,7 @@ import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.impl.Backoff;
 import org.apache.pulsar.common.api.proto.CommandSubscribe;
@@ -68,7 +69,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     }
 
     private static final int defaultReadMaxSizeBytes = 4 * 1024 * 1024;
-    private static final int replicatorQueueSize = 1000;
+    private static final int replicatorQueueSize = 2000;
     private volatile int pendingQueueSize = 0;
     private static final AtomicIntegerFieldUpdater<AmqpExchangeReplicator> PENDING_SIZE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AmqpExchangeReplicator.class, "pendingQueueSize");
@@ -86,6 +87,8 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     private final ScheduledExecutorService markDeleteExecutor = Executors.newSingleThreadScheduledExecutor(
             new DefaultThreadFactory("router-mark-delete"));
     private final ConcurrentLinkedDeque<Position> markDeletePositionDeque = new ConcurrentLinkedDeque<>();
+    private final Executor executorService = Executors.newSingleThreadExecutor(
+            new DefaultThreadFactory("amqp-ex-router"));
 
     protected AmqpExchangeReplicator(PersistentExchange persistentExchange) {
         this.persistentExchange = persistentExchange;
@@ -167,6 +170,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     }
 
     private void readMoreEntries() {
+        log.info("xxxx {} Read more entries.", name);
         if (log.isDebugEnabled()) {
             log.debug("{} Read more entries.", name);
         }
@@ -185,7 +189,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
             }
         } else {
             // no permits from rate limit
-            scheduledExecutorService.schedule(this::readMoreEntries, MESSAGE_RATE_BACKOFF_MS, TimeUnit.MILLISECONDS);
+            scheduledExecutorService.schedule(this::readMoreEntries, 1, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -196,8 +200,11 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                 log.debug("{} Replicator queue is full, availablePermits: {}, pause route.",
                         name, availablePermits);
             }
+            log.info("xxxx {} Replicator queue is full, availablePermits: {}, pause route.",
+                    name, availablePermits);
             return 0;
         }
+        log.info("xxxx getAvailablePermits {}", availablePermits);
         return availablePermits;
     }
 
@@ -206,10 +213,23 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (log.isDebugEnabled()) {
             log.debug("{} Read entries complete. Entries size: {}", name, list.size());
         }
+        readFailureBackoff.reset();
+        List<Pair<PositionImpl, ByteBuf>> bufList = new ArrayList<>(list.size());
         for (Entry entry : list) {
+            entry.getDataBuffer().retain();
+            bufList.add(
+                    Pair.of(PositionImpl.get(entry.getLedgerId(), entry.getEntryId()), entry.getDataBuffer()));
+        }
+        this.readComplete(bufList);
+//        executorService.execute(() -> this.readComplete(bufList));
+    }
+
+    private void readComplete(List<Pair<PositionImpl, ByteBuf>> list) {
+        log.info("xxxx {} Read entries complete. Entries size: {}", name, list.size());
+        HAVE_PENDING_READ_UPDATER.set(this, FALSE);
+        for (Pair<PositionImpl, ByteBuf> entry : list) {
             PENDING_SIZE_UPDATER.incrementAndGet(this);
-            final PositionImpl position = PositionImpl.get(entry.getLedgerId(), entry.getEntryId());
-            readProcess(entry, position).whenCompleteAsync((ignored, exception) -> {
+            readProcess(entry.getRight(), entry.getLeft()).whenCompleteAsync((ignored, exception) -> {
                 if (exception != null) {
                     log.error("{} Error producing messages", name, exception);
                     markDeletePositions();
@@ -218,21 +238,20 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
                     if (log.isDebugEnabled()) {
                         log.debug("{} Route message successfully.", name);
                     }
-                    this.markDeletePositionDeque.add(position);
+                    log.info("{} Route message successfully {}.", name, entry.getLeft());
+                    this.markDeletePositionDeque.add(entry.getLeft());
                 }
-
                 if (PENDING_SIZE_UPDATER.decrementAndGet(this) == 0
                         && HAVE_PENDING_READ_UPDATER.get(this) == FALSE) {
+                    log.info("xxxx read more entries after read complete");
                     this.readMoreEntries();
                 }
             });
-            entry.release();
+            entry.getRight().release();
         }
-
-        HAVE_PENDING_READ_UPDATER.set(this, FALSE);
     }
 
-    public abstract CompletableFuture<Void> readProcess(Entry entry, Position position);
+    public abstract CompletableFuture<Void> readProcess(ByteBuf entry, Position position);
 
     @Override
     public void readEntriesFailed(ManagedLedgerException exception, Object o) {
@@ -248,6 +267,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (log.isDebugEnabled()) {
             log.debug("{} Read entries from bookie failed, retrying in {} s", name, waitTimeMs / 1000, exception);
         }
+        log.info("xxxx {} Read entries from bookie failed, retrying in {} s", name, waitTimeMs / 1000, exception);
         HAVE_PENDING_READ_UPDATER.set(this, FALSE);
         scheduledExecutorService.schedule(this::readMoreEntries, waitTimeMs, TimeUnit.MILLISECONDS);
     }

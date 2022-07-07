@@ -113,7 +113,7 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public CompletableFuture<Void> routingMessage(long ledgerId, long entryId,
                                                   String routingKey, Map<String, Object> properties) {
-        CompletableFuture<Void> completableFuture = CompletableFuture.completedFuture(null);
+        CompletableFuture<Void> completableFuture = new CompletableFuture<>();
         if (isMatch(properties)) {
             try {
                 return queue.writeIndexMessageAsync(exchange.getName(), ledgerId, entryId);

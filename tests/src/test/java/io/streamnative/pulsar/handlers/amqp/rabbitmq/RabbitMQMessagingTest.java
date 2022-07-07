@@ -77,12 +77,12 @@ public class RabbitMQMessagingTest extends AmqpTestBase {
         basicDirectConsume(newAddedVhost, false);
     }
 
-    @Test(timeOut = 1000 * 60 * 30, dataProvider = "consumeExclusiveProvider")
+    @Test(dataProvider = "consumeExclusiveProvider")
     public void basicConsumeCase(boolean consumeExclusive) throws Exception {
         basicDirectConsume("vhost1", consumeExclusive);
     }
 
-    @Test(timeOut = 1000 * 60 * 30)
+    @Test()
     public void basicConsumeCase2() throws Exception {
         basicDirectConsume("vhost1", true);
     }

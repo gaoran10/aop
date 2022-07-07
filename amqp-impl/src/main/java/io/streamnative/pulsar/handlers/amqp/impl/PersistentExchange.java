@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.google.common.collect.Sets;
+import io.netty.buffer.ByteBuf;
 import io.prometheus.client.Histogram;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpExchange;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
@@ -88,13 +89,16 @@ public class PersistentExchange extends AbstractAmqpExchange {
         if (messageReplicator == null) {
             messageReplicator = new AmqpExchangeReplicator(this) {
                 @Override
-                public CompletableFuture<Void> readProcess(Entry entry, Position position) {
-                    Map<String, Object> props;
+                public CompletableFuture<Void> readProcess(ByteBuf data, Position position) {
+                    Map<String, Object> props = new HashMap<>();
                     try {
-                        MessageImpl<byte[]> message = MessageImpl.deserialize(entry.getDataBuffer());
-                        props = message.getMessageBuilder().getPropertiesList().stream()
-                                .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
-                    } catch (IOException e) {
+                        MessageImpl<byte[]> message = MessageImpl.deserialize(data);
+                        for (KeyValue keyValue : message.getMessageBuilder().getPropertiesList()) {
+                            props.put(keyValue.getKey(), keyValue.getValue());
+                        }
+//                        props = message.getMessageBuilder().getPropertiesList().stream()
+//                                .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
+                    } catch (Exception e) {
                         log.error("Deserialize entry dataBuffer failed. exchangeName: {}", exchangeName, e);
                         return FutureUtil.failedFuture(e);
                     }
@@ -108,6 +112,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
                                 props);
                         routeFutureList.add(routeFuture);
                     }
+                    log.info("{} read process position {}", exchangeName, position);
                     return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
                         if (t != null) {
                             exchangeMetrics.routeFailedInc();
