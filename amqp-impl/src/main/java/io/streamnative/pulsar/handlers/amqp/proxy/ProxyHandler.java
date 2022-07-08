@@ -123,7 +123,10 @@ public class ProxyHandler {
             super.channelActive(ctx);
             for (Object msg : connectMsgList) {
                 ((ByteBuf) msg).retain();
-                brokerChannel.writeAndFlush(msg).addListener(new GenericFutureListener<Future<? super Void>>() {
+                log.info("channel active brokerChannel: {}", brokerChannel);
+                ChannelFuture channelFuture = brokerChannel.writeAndFlush(msg);
+                log.info("channel active channelFuture: {}", channelFuture);
+                channelFuture.addListener(new GenericFutureListener<Future<? super Void>>() {
                     @Override
                     public void operationComplete(Future<? super Void> future) throws Exception {
                         brokerChannel.read();
