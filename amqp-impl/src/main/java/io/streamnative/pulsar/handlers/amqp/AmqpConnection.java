@@ -109,9 +109,11 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
     private ServerCnx pulsarServerCnx;
     private AmqpBrokerService amqpBrokerService;
     private AuthenticationState authenticationState;
+    private AmqpProtocolHandler amqpProtocolHandler;
 
     public AmqpConnection(AmqpServiceConfiguration amqpConfig,
-                          AmqpBrokerService amqpBrokerService) {
+                          AmqpBrokerService amqpBrokerService,
+                          AmqpProtocolHandler amqpProtocolHandler) {
         super(amqpBrokerService.getPulsarService(), amqpConfig);
         this.connectionId = ID_GENERATOR.incrementAndGet();
         this.channels = new ConcurrentLongHashMap<>();
@@ -124,6 +126,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         this.heartBeat = amqpConfig.getAmqpHeartBeat();
         this.amqpOutputConverter = new AmqpOutputConverter(this);
         this.amqpBrokerService = amqpBrokerService;
+        this.amqpProtocolHandler = amqpProtocolHandler;
     }
 
 
@@ -210,12 +213,11 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                 authMethod = "basic";
             }
 
-            AuthenticationProvider authenticationProvider = amqpBrokerService.getAuthenticationService()
-                    .getAuthenticationProvider(authMethod);
-            if (authenticationProvider == null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("No authentication provider is configured: mechanism={}", mechanism);
-                }
+            if (amqpProtocolHandler.getAuthMap().isEmpty()) {
+//                if (log.isDebugEnabled()) {
+//                    log.debug("No authentication provider is configured: mechanism={}", mechanism);
+//                }
+                log.error("No authentication provider is configured: mechanism={}", mechanism);
                 sendConnectionClose(ErrorCodes.CONNECTION_FORCED, "No authentication provider is configured", 0);
                 return;
             }
@@ -236,11 +238,15 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                     }
                     // Encode data to Pulsar format: USERNAME:PASSWORD
                     authData = AuthData.of(String.format("%s:%s", data[0], data[1]).getBytes(StandardCharsets.UTF_8));
+                    authenticationState = amqpProtocolHandler.getAuthMap().get("basic")
+                            .newAuthState(authData, null, null);
                 } else {
                     authData = AuthData.of(response);
+                    authenticationState = amqpProtocolHandler.getAuthMap().get("token")
+                            .newAuthState(authData, null, null);
                 }
 
-                authenticationState = authenticationProvider.newAuthState(authData, null, null);
+//                authenticationState = authenticationProvider.newAuthState(authData, null, null);
                 authenticationState.authenticate(authData);
                 if (log.isDebugEnabled()) {
                     String authRole = authenticationState.getAuthRole();

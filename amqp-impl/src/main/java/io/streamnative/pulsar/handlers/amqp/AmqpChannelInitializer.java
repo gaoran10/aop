@@ -25,11 +25,14 @@ public class AmqpChannelInitializer extends ChannelInitializer<SocketChannel> {
 
     private final AmqpServiceConfiguration amqpConfig;
     private final AmqpBrokerService amqpBrokerService;
+    private final AmqpProtocolHandler amqpProtocolHandler;
 
-    public AmqpChannelInitializer(AmqpServiceConfiguration amqpConfig, AmqpBrokerService amqpBrokerService) {
+    public AmqpChannelInitializer(AmqpServiceConfiguration amqpConfig, AmqpBrokerService amqpBrokerService,
+                                  AmqpProtocolHandler amqpProtocolHandler) {
         super();
         this.amqpConfig = amqpConfig;
         this.amqpBrokerService = amqpBrokerService;
+        this.amqpProtocolHandler = amqpProtocolHandler;
     }
 
     @Override
@@ -44,7 +47,7 @@ public class AmqpChannelInitializer extends ChannelInitializer<SocketChannel> {
 //            new LengthFieldBasedFrameDecoder(MAX_FRAME_LENGTH, 3, 4, 1, 0));
         ch.pipeline().addLast("consolidation", new FlushConsolidationHandler(1024, true));
         ch.pipeline().addLast("frameEncoder", new AmqpEncoder());
-        ch.pipeline().addLast("handler", new AmqpConnection(amqpConfig, amqpBrokerService));
+        ch.pipeline().addLast("handler", new AmqpConnection(amqpConfig, amqpBrokerService, amqpProtocolHandler));
     }
 
 }

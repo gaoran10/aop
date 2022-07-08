@@ -19,20 +19,21 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
-import io.prometheus.client.Counter;
+import io.streamnative.pulsar.handlers.amqp.authentication.AuthenticationProviderBasic;
 import io.streamnative.pulsar.handlers.amqp.proxy.ProxyConfiguration;
 import io.streamnative.pulsar.handlers.amqp.proxy.ProxyService;
 import io.streamnative.pulsar.handlers.amqp.utils.ConfigurationUtils;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.ServiceConfigurationUtils;
+import org.apache.pulsar.broker.authentication.AuthenticationProvider;
+import org.apache.pulsar.broker.authentication.AuthenticationProviderToken;
 import org.apache.pulsar.broker.protocol.ProtocolHandler;
 import org.apache.pulsar.broker.service.BrokerService;
-import org.apache.pulsar.broker.stats.prometheus.PrometheusRawMetricsProvider;
-import org.apache.pulsar.common.util.SimpleTextOutputStream;
 import org.apache.pulsar.policies.data.loadbalancer.AdvertisedListener;
 
 /**
@@ -55,6 +56,8 @@ public class AmqpProtocolHandler implements ProtocolHandler {
     private String bindAddress;
 
     private AmqpBrokerService amqpBrokerService;
+    @Getter
+    private Map<String, AuthenticationProvider> authMap = new HashMap<>();
 
     @Override
     public String protocolName() {
@@ -77,6 +80,20 @@ public class AmqpProtocolHandler implements ProtocolHandler {
             amqpConfig = ConfigurationUtils.create(conf.getProperties(), AmqpServiceConfiguration.class);
         }
         this.bindAddress = ServiceConfigurationUtils.getDefaultOrConfiguredAddress(amqpConfig.getBindAddress());
+
+        if (amqpConfig.getProperty("basicAuthConf") != null) {
+            AuthenticationProviderBasic basicProvider = new AuthenticationProviderBasic();
+            basicProvider.initialize(amqpConfig);
+            authMap.put("basic", basicProvider);
+            log.info("amqp protocol handler init basic provider");
+        }
+        if (amqpConfig.getAuthenticationProviders()
+                .contains("org.apache.pulsar.broker.authentication.AuthenticationProviderToken")) {
+            AuthenticationProviderToken tokenProvider = new AuthenticationProviderToken();
+            tokenProvider.initialize(amqpConfig);
+            authMap.put("token", tokenProvider);
+            log.info("amqp protocol handler init token provider");
+        }
     }
 
     // This method is called after initialize
@@ -142,7 +159,7 @@ public class AmqpProtocolHandler implements ProtocolHandler {
                 if (listener.startsWith(PLAINTEXT_PREFIX)) {
                     builder.put(
                         new InetSocketAddress(brokerService.pulsar().getBindAddress(), getListenerPort(listener)),
-                        new AmqpChannelInitializer(amqpConfig, amqpBrokerService));
+                        new AmqpChannelInitializer(amqpConfig, amqpBrokerService, this));
                 } else {
                     log.error("Amqp listener {} not supported. supports {} and {}",
                         listener, PLAINTEXT_PREFIX, SSL_PREFIX);

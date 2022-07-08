@@ -102,4 +102,10 @@ public class AmqpTokenAuthenticationTestBase extends AmqpProtocolHandlerTestBase
     public void cleanup() throws Exception {
         super.internalCleanup();
     }
+
+    public static void main(String[] args) {
+        String basicAuthConf = Base64.encodeBase64String(("superUser:mQQQIsyvvKRtU\n"
+                + "superUser2:$apr1$foobarmq$kuSZlLgOITksCkRgl57ie/\n").getBytes(StandardCharsets.UTF_8));
+        System.out.println(basicAuthConf);
+    }
 }

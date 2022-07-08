@@ -16,14 +16,21 @@ package io.streamnative.pulsar.handlers.amqp.rabbitmq.authentication;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.expectThrows;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.DefaultConsumer;
+import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.PossibleAuthenticationFailureException;
 import io.streamnative.pulsar.handlers.amqp.AmqpTokenAuthenticationTestBase;
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import lombok.Cleanup;
+import org.testng.Assert;
 import org.testng.annotations.Test;
 
 /**
@@ -33,8 +40,7 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
     private void testConnect(int port) throws Exception {
         ConnectionFactory connectionFactory = new ConnectionFactory();
         connectionFactory.setHost("localhost");
-        connectionFactory.setPort(port);
-        connectionFactory.setVirtualHost("vhost1");
+        connectionFactory.setPort(5672);
         connectionFactory.setUsername("superUser2");
         connectionFactory.setPassword("superpassword");
         @Cleanup
@@ -43,9 +49,63 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
         Channel ignored = connection.createChannel();
     }
 
+    private Connection getConnection() throws IOException, TimeoutException {
+        ConnectionFactory connectionFactory = new ConnectionFactory();
+        connectionFactory.setHost("localhost");
+        connectionFactory.setPort(5682);
+        connectionFactory.setUsername("superUser2");
+        connectionFactory.setPassword("superpassword2");
+        Connection connection = connectionFactory.newConnection();
+        return connection;
+    }
+
+    protected void basicDirectConsume() throws Exception {
+        String exchangeName = randExName();
+        String routingKey = "test.key";
+        String queueName = randQuName();
+
+        Connection conn = getConnection();
+        Channel channel = conn.createChannel();
+
+        channel.exchangeDeclare(exchangeName, "direct", true);
+        channel.queueDeclare(queueName, true, false, false, null);
+        channel.queueBind(queueName, exchangeName, routingKey);
+
+        int messageCnt = 100;
+        CountDownLatch countDownLatch = new CountDownLatch(messageCnt);
+
+        AtomicInteger consumeIndex = new AtomicInteger(0);
+        channel.basicConsume(queueName, true, "", false, true, null,
+                new DefaultConsumer(channel) {
+                    @Override
+                    public void handleDelivery(String consumerTag,
+                                               Envelope envelope,
+                                               AMQP.BasicProperties properties,
+                                               byte[] body) throws IOException {
+                        long deliveryTag = envelope.getDeliveryTag();
+//                        Assert.assertEquals(new String(body), "Hello, world! - " + consumeIndex.getAndIncrement());
+                        System.out.println("receive msg: " + new String(body));
+                        consumeIndex.incrementAndGet();
+                        // (process the message components here ...)
+//                        channel.basicAck(deliveryTag, false);
+                        countDownLatch.countDown();
+                    }
+                });
+
+        for (int i = 0; i < messageCnt; i++) {
+            byte[] messageBodyBytes = ("Hello, world! - " + i).getBytes();
+            channel.basicPublish(exchangeName, routingKey, null, messageBodyBytes);
+        }
+
+        countDownLatch.await();
+        Assert.assertEquals(messageCnt, consumeIndex.get());
+        channel.close();
+        conn.close();
+    }
+
     @Test
     public void testConnectToBroker() throws Exception {
-        testConnect(getAmqpBrokerPortList().get(0));
+        basicDirectConsume();
     }
 
     @Test
