@@ -61,7 +61,7 @@ public final class MessageFetchContext {
         if (!autoAck && !channel.getCreditManager().hasCredit()) {
             MethodRegistry methodRegistry = channel.getConnection().getMethodRegistry();
             BasicGetEmptyBody responseBody = methodRegistry.createBasicGetEmptyBody(null);
-            channel.getConnection().writeFrame(responseBody.generateFrame(channel.getChannelId()));
+            channel.getConnection().writeFrameAndFlush(responseBody.generateFrame(channel.getChannelId()));
             return;
         }
         ManagedCursor cursor = ((PersistentSubscription) consumer.getSubscription()).getCursor();
@@ -83,7 +83,7 @@ public final class MessageFetchContext {
                 }
                 MethodRegistry methodRegistry = channel.getConnection().getMethodRegistry();
                 BasicGetEmptyBody responseBody = methodRegistry.createBasicGetEmptyBody(null);
-                channel.getConnection().writeFrame(responseBody.generateFrame(channel.getChannelId()));
+                channel.getConnection().writeFrameAndFlush(responseBody.generateFrame(channel.getChannelId()));
             }
         });
 

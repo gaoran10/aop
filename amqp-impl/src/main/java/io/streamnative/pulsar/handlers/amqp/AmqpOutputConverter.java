@@ -330,10 +330,8 @@ public class AmqpOutputConverter {
     }
 
     public void confirmConsumerAutoClose(int channelId, AMQShortString consumerTag) {
-
         BasicCancelOkBody basicCancelOkBody = connection.getMethodRegistry().createBasicCancelOkBody(consumerTag);
-        writeFrame(basicCancelOkBody.generateFrame(channelId));
-
+        connection.writeFrameAndFlush(basicCancelOkBody.generateFrame(channelId));
     }
 
     /**

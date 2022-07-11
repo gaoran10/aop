@@ -240,7 +240,7 @@ public abstract class AmqpProtocolTestBase {
             return channelMethodProcessor;
         }
 
-        @Override public synchronized void writeFrame(AMQDataBlock frame) {
+        @Override public synchronized void writeFrameAndFlush(AMQDataBlock frame) {
             if (log.isDebugEnabled()) {
                 log.debug("send: " + frame);
             }
@@ -266,7 +266,7 @@ public abstract class AmqpProtocolTestBase {
             try {
                 AMQMethodBody res = connection.getMethodRegistry().createBasicGetOkBody(1, true,
                     AMQShortString.createAMQShortString("default"), AMQShortString.createAMQShortString(""), 100);
-                connection.writeFrame(res.generateFrame(1));
+                connection.writeFrameAndFlush(res.generateFrame(1));
             } catch (Exception e) {
                 log.error("FAILED BasicGet", e);
             }
