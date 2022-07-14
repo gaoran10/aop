@@ -305,7 +305,6 @@ public class PersistentExchange extends AbstractAmqpExchange {
             ManagedCursor newCursor;
             try {
                 newCursor = ledger.openCursor(name, CommandSubscribe.InitialPosition.Latest);
-//                newCursor = ledger.newNonDurableCursor(ledger.getLastConfirmedEntry(), name);
             } catch (Exception e) {
                 log.error("Error new cursor for topic {} - {}. will cause fetch data error.",
                     persistentTopic.getName(), e);

@@ -84,7 +84,6 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
     }
 
     public ProxyConnection(ProxyService proxyService) throws PulsarClientException {
-        log.info("ProxyConnection init ...");
         this.proxyService = proxyService;
         this.proxyConfig = proxyService.getProxyConfig();
         brokerDecoder = new AmqpBrokerDecoder(this);
@@ -123,7 +122,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         switch (state) {
             case Init:
             case RedirectLookup:
-                log.info("ProxyConnection [channelRead] - RedirectLookup");
+//                log.info("ProxyConnection [channelRead] - RedirectLookup");
                 connectMsgList.add(msg);
 
                 // Get a buffer that contains the full frame
@@ -141,9 +140,9 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
 
                 break;
             case RedirectToBroker:
-                if (log.isDebugEnabled()) {
-                    log.debug("ProxyConnection [channelRead] - RedirectToBroker");
-                }
+//                if (log.isDebugEnabled()) {
+//                    log.debug("ProxyConnection [channelRead] - RedirectToBroker");
+//                }
                 if (proxyHandler != null) {
                     proxyHandler.getBrokerChannel().writeAndFlush(msg);
                 }
@@ -247,7 +246,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
     }
 
     public void handleConnect(AtomicInteger retryTimes) {
-        log.info("handle connect residue retryTimes: {}", retryTimes);
+//        log.info("handle connect residue retryTimes: {}", retryTimes);
         if (retryTimes.get() == 0) {
             log.warn("Handle connect retryTimes is 0.");
             close();
@@ -287,7 +286,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
             proxyHandler = new ProxyHandler(vhost, proxyService,
                     this, aopBrokerHost, aopBrokerPort, connectMsgList, responseBody);
             state = State.RedirectToBroker;
-            log.info("Handle connect complete. aopBrokerHost: {}, aopBrokerPort: {}", aopBrokerHost, aopBrokerPort);
+//            log.info("Handle connect complete. aopBrokerHost: {}, aopBrokerPort: {}", aopBrokerHost, aopBrokerPort);
         } catch (Exception e) {
             retryTimes.decrementAndGet();
             resetProxyHandler();
@@ -374,9 +373,9 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
 
     public void close() {
         log.info("ProxyConnection close.");
-        if (log.isDebugEnabled()) {
-            log.debug("ProxyConnection close.");
-        }
+//        if (log.isDebugEnabled()) {
+//            log.debug("ProxyConnection close.");
+//        }
 
         if (proxyHandler != null) {
             resetProxyHandler();
