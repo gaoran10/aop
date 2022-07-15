@@ -243,7 +243,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
 
     @Override
-    public void addQueue(AmqpQueue queue) {
+    public CompletableFuture<Void> addQueue(AmqpQueue queue) {
         queues.add(queue);
         if (exchangeType == Type.Direct) {
             for (String bindingKey : queue.getRouter(exchangeName).getBindingKey()) {
@@ -260,8 +260,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
             }
         }
         updateExchangeProperties();
-        createCursorIfNotExists(queue.getName());
-
+        return createCursorIfNotExists(queue.getName()).thenApply(__ -> null);
     }
 
     @Override

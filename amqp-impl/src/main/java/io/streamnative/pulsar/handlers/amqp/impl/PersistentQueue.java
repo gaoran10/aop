@@ -122,10 +122,12 @@ public class PersistentQueue extends AbstractAmqpQueue {
     }
 
     @Override
-    public void bindExchange(AmqpExchange exchange, AmqpMessageRouter router, String bindingKey,
+    public CompletableFuture<Void> bindExchange(AmqpExchange exchange, AmqpMessageRouter router, String bindingKey,
                              Map<String, Object> arguments) {
-        super.bindExchange(exchange, router, bindingKey, arguments);
-        updateQueueProperties();
+        return super.bindExchange(exchange, router, bindingKey, arguments).thenApply(__ -> {
+            updateQueueProperties();
+            return null;
+        });
     }
 
     @Override
@@ -165,8 +167,7 @@ public class PersistentQueue extends AbstractAmqpQueue {
                 messageRouter.setExchange(amqpExchange);
                 messageRouter.setArguments(arguments);
                 messageRouter.setBindingKeys(bindingKeys);
-                routers.put(exchangeName, messageRouter);
-                amqpExchange.addQueue(this);
+                amqpExchange.addQueue(this).thenAccept(__ -> routers.put(exchangeName, messageRouter));
             });
         });
     }

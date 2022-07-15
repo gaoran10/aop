@@ -178,7 +178,7 @@ public class AmqpConsumer extends Consumer {
                                 indexMessage.recycle();
                             }
                         })).exceptionally(throwable -> {
-                            log.error("Failed to get queue from queue container", throwable);
+                            log.error("[{}] Failed to get queue from queue container.", queueName, throwable);
                             sendFuture.completeExceptionally(throwable);
                             return null;
                 });

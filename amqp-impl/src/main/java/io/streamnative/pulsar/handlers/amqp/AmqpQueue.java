@@ -62,7 +62,7 @@ public interface AmqpQueue {
     /**
      * Bind to a exchange {@link AmqpExchange}.
      */
-    void bindExchange(AmqpExchange exchange, AmqpMessageRouter router, String bindingKey,
+    CompletableFuture<Void> bindExchange(AmqpExchange exchange, AmqpMessageRouter router, String bindingKey,
                       Map<String, Object> arguments);
 
     /**
