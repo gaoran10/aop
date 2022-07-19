@@ -175,16 +175,16 @@ public interface ExchangeMetrics {
 
         public void collect() {
             writeCounter.collect();
-            writeSuccessCounter.collect();
+//            writeSuccessCounter.collect();
             writeFailedCounter.collect();
-            writeLatency.collect();
+//            writeLatency.collect();
             readCounter.collect();
             readFailedCounter.collect();
-            readLatency.collect();
+//            readLatency.collect();
             ackCounter.collect();
             routeCounter.collect();
             routeFailedCounter.collect();
-            routeLatency.collect();
+//            routeLatency.collect();
         }
     }
 

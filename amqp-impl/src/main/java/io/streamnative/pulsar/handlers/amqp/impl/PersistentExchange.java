@@ -90,6 +90,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
             messageReplicator = new AmqpExchangeReplicator(this) {
                 @Override
                 public CompletableFuture<Void> readProcess(ByteBuf data, Position position) {
+                    exchangeMetrics.routeInc();
                     Map<String, Object> props = new HashMap<>();
                     try {
                         MessageImpl<byte[]> message = MessageImpl.deserialize(data);
@@ -98,8 +99,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         }
 //                        props = message.getMessageBuilder().getPropertiesList().stream()
 //                                .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
-                        exchangeMetrics.routeInc();
-                        Histogram.Timer routeTimer = exchangeMetrics.startRoute();
+//                        Histogram.Timer routeTimer = exchangeMetrics.startRoute();
                         Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
                         String bindingKey = props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
                         if (exchangeType == Type.Direct) {
@@ -121,9 +121,9 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         return FutureUtil.waitForAll(routeFutureList).whenComplete((__, t) -> {
                             if (t != null) {
                                 exchangeMetrics.routeFailedInc();
-                                return;
+//                                return;
                             }
-                            exchangeMetrics.finishRoute(routeTimer);
+//                            exchangeMetrics.finishRoute(routeTimer);
                         });
                     } catch (Exception e) {
                         log.error("================= Read process failed. exchangeName: {}", exchangeName, e);
@@ -140,14 +140,14 @@ public class PersistentExchange extends AbstractAmqpExchange {
     @Override
     public CompletableFuture<Position> writeMessageAsync(Message<byte[]> message, String routingKey) {
         exchangeMetrics.writeInc();
-        Histogram.Timer writeTimer = exchangeMetrics.startWrite();
+//        Histogram.Timer writeTimer = exchangeMetrics.startWrite();
         return amqpEntryWriter.publishMessage(message).whenComplete((__, t) -> {
             if (t != null) {
                 exchangeMetrics.writeFailed();
                 return;
             }
-            exchangeMetrics.writeSuccessInc();
-            exchangeMetrics.finishWrite(writeTimer);
+//            exchangeMetrics.writeSuccessInc();
+//            exchangeMetrics.finishWrite(writeTimer);
         });
     }
 
@@ -168,11 +168,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
                 return;
             }
             ManagedLedgerImpl ledger = (ManagedLedgerImpl) cursor.getManagedLedger();
-            Histogram.Timer readTimer = exchangeMetrics.startRead();
+//            Histogram.Timer readTimer = exchangeMetrics.startRead();
             ledger.asyncReadEntry((PositionImpl) position, new AsyncCallbacks.ReadEntryCallback() {
                         @Override
                         public void readEntryComplete(Entry entry, Object o) {
-                            exchangeMetrics.finishRead(readTimer);
+//                            exchangeMetrics.finishRead(readTimer);
                             future.complete(entry);
                         }
 

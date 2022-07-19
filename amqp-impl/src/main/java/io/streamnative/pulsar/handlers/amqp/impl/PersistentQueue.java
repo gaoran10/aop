@@ -81,17 +81,17 @@ public class PersistentQueue extends AbstractAmqpQueue {
     public CompletableFuture<Void> writeIndexMessageAsync(String exchangeName, long ledgerId, long entryId) {
         try {
             queueMetrics.writeInc();
-            Histogram.Timer writeTimer = queueMetrics.startWrite();
+//            Histogram.Timer writeTimer = queueMetrics.startWrite();
             IndexMessage indexMessage = IndexMessage.create(exchangeName, ledgerId, entryId);
             MessageImpl<byte[]> message = MessageConvertUtils.toPulsarMessage(indexMessage);
             return amqpEntryWriter.publishMessage(message).whenComplete((__, t) -> {
                 if (t != null) {
                     log.error("================= Failed to publish messages queue {}.", queueName);
                     queueMetrics.writeFailed();
-                    return;
+//                    return;
                 }
-                queueMetrics.writeSuccessInc();
-                queueMetrics.finishWrite(writeTimer);
+//                queueMetrics.writeSuccessInc();
+//                queueMetrics.finishWrite(writeTimer);
             }).thenApply(__ -> null);
         } catch (Exception e) {
             log.error("Failed to writer index message for exchange {} with position {}:{}.",
@@ -104,14 +104,14 @@ public class PersistentQueue extends AbstractAmqpQueue {
     @Override
     public CompletableFuture<Entry> readEntryAsync(String exchangeName, long ledgerId, long entryId) {
         queueMetrics.readInc();
-        Histogram.Timer readTimer = queueMetrics.startRead();
+//        Histogram.Timer readTimer = queueMetrics.startRead();
         return getRouter(exchangeName).getExchange().readEntryAsync(getName(), ledgerId, entryId)
                 .whenComplete((__, t) -> {
             if (t != null) {
                 queueMetrics.readFailed();
-                return;
+//                return;
             }
-            queueMetrics.finishRead(readTimer);
+//            queueMetrics.finishRead(readTimer);
         });
     }
 

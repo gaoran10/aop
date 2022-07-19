@@ -39,8 +39,7 @@ public interface QueueMetrics {
         private final String vhost;
         @Getter
         private final String queueName;
-//        private final static String[] LABELS = {"vhost", "queue_name"};
-        private final static String[] LABELS = {"vhost"};
+        private final static String[] LABELS = {"vhost", "queue_name"};
         private final String[] labelValues;
 
         private static final Counter writeCounter = Counter.build()
@@ -86,8 +85,7 @@ public interface QueueMetrics {
         public QueueMetricsImpl(String vhost, String queueName) {
             this.vhost = vhost;
             this.queueName = queueName;
-//            this.labelValues = new String[]{vhost, queueName};
-            this.labelValues = new String[]{vhost};
+            this.labelValues = new String[]{vhost, queueName};
         }
 
         public void writeInc() {
@@ -134,12 +132,12 @@ public interface QueueMetrics {
 
         public void collect() {
             writeCounter.collect();
-            writeSuccessCounter.collect();
+//            writeSuccessCounter.collect();
             writeFailedCounter.collect();
-            writeLatency.collect();
+//            writeLatency.collect();
             readCounter.collect();
             readFailedCounter.collect();
-            readLatency.collect();
+//            readLatency.collect();
             ackCounter.collect();
         }
 
