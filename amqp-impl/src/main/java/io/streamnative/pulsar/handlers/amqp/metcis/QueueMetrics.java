@@ -31,7 +31,7 @@ public interface QueueMetrics {
 
     void ackInc();
 
-    void collect();
+//    void collect();
 
     static class QueueMetricsImpl implements QueueMetrics {
 
@@ -130,16 +130,16 @@ public interface QueueMetrics {
             ackCounter.labels(labelValues).inc();
         }
 
-        public void collect() {
-            writeCounter.collect();
-//            writeSuccessCounter.collect();
-            writeFailedCounter.collect();
-//            writeLatency.collect();
-            readCounter.collect();
-            readFailedCounter.collect();
-//            readLatency.collect();
-            ackCounter.collect();
-        }
+//        public void collect() {
+//            writeCounter.collect();
+////            writeSuccessCounter.collect();
+//            writeFailedCounter.collect();
+////            writeLatency.collect();
+//            readCounter.collect();
+//            readFailedCounter.collect();
+////            readLatency.collect();
+//            ackCounter.collect();
+//        }
 
     }
 
@@ -204,10 +204,10 @@ public interface QueueMetrics {
 
         }
 
-        @Override
-        public void collect() {
-
-        }
+//        @Override
+//        public void collect() {
+//
+//        }
     }
 
     static QueueMetrics create(boolean enableMetrics, String vhost, String queueName) {

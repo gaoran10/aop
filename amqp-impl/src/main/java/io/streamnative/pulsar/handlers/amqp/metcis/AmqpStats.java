@@ -3,6 +3,7 @@ package io.streamnative.pulsar.handlers.amqp.metcis;
 
 import io.prometheus.client.Gauge;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,9 +21,9 @@ public interface AmqpStats {
 
     void deleteQueueMetrics(String vhost, String queueName);
 
-    void collect();
+//    void collect();
 
-    static class AmqpStatsImpl implements AmqpStats{
+    static class AmqpStatsImpl implements AmqpStats {
         private final boolean enableMetrics;
         private final Map<String, ConnectionMetrics> connectionMetricsMap = new ConcurrentHashMap<>();
         private final Map<String, Map<String, ExchangeMetrics>> exchangeMetricsMap = new ConcurrentHashMap<>();
@@ -48,6 +49,7 @@ public interface AmqpStats {
 
         public void connectionInc(String vhost) {
             connectionMetricsMap.computeIfAbsent(vhost, k -> ConnectionMetrics.create(enableMetrics, vhost)).inc();
+            updateVhostGauge();
         }
 
         public void connectionDec(String vhost) {
@@ -55,12 +57,14 @@ public interface AmqpStats {
                 metrics.dec();
                 return metrics;
             });
+            updateVhostGauge();
         }
 
         public ExchangeMetrics addExchangeMetrics(String vhost, String exchangeName) {
             ExchangeMetrics exchangeMetrics = ExchangeMetrics.create(this.enableMetrics, vhost, exchangeName);
             exchangeMetricsMap.computeIfAbsent(exchangeMetrics.getVhost(), k -> new ConcurrentHashMap<>())
                     .putIfAbsent(exchangeMetrics.getExchangeName(), exchangeMetrics);
+            updateExchangeGauge(vhost);
             return exchangeMetrics;
         }
 
@@ -69,12 +73,14 @@ public interface AmqpStats {
                 map.remove(exchangeName);
                 return map;
             });
+            updateExchangeGauge(vhost);
         }
 
         public QueueMetrics addQueueMetrics(String vhost, String queueName) {
             QueueMetrics queueMetrics = QueueMetrics.create(this.enableMetrics, vhost, queueName);
             queueMetricsMap.computeIfAbsent(queueMetrics.getVhost(), k -> new ConcurrentHashMap<>())
                     .putIfAbsent(queueMetrics.getQueueName(), queueMetrics);
+            updateQueueGauge(vhost);
             return queueMetrics;
         }
 
@@ -83,35 +89,48 @@ public interface AmqpStats {
                 map.remove(queueName);
                 return map;
             });
+            updateQueueGauge(vhost);
         }
 
-        public void collect() {
-            for (ConnectionMetrics metrics : connectionMetricsMap.values()) {
-                metrics.collect();
-            }
+        private void updateVhostGauge() {
             vhostGauge.set(connectionMetricsMap.size());
-            vhostGauge.collect();
-            for (Map.Entry<String, Map<String, ExchangeMetrics>> metricsEntry : exchangeMetricsMap.entrySet()) {
-                if (metricsEntry == null) {
-                    continue;
-                }
-                exchangeGauge.labels(metricsEntry.getKey()).set(metricsEntry.getValue().size());
-                for (ExchangeMetrics metrics : metricsEntry.getValue().values()) {
-                    metrics.collect();
-                }
-            }
-            exchangeGauge.collect();
-            for (Map.Entry<String, Map<String, QueueMetrics>> metricsEntry : queueMetricsMap.entrySet()) {
-                if (metricsEntry == null) {
-                    continue;
-                }
-                queueGauge.labels(metricsEntry.getKey()).set(metricsEntry.getValue().size());
-                for (QueueMetrics metrics : metricsEntry.getValue().values()) {
-                    metrics.collect();
-                }
-            }
-            queueGauge.collect();
         }
+
+        private void updateExchangeGauge(String vhost) {
+            exchangeGauge.labels(vhost)
+                    .set(exchangeMetricsMap.getOrDefault(vhost, new HashMap<>(0)).size());
+        }
+
+        private void updateQueueGauge(String vhost) {
+            queueGauge.labels(vhost)
+                    .set(queueMetricsMap.getOrDefault(vhost, new HashMap<>(0)).size());
+        }
+
+//        public void collect() {
+//            for (ConnectionMetrics metrics : connectionMetricsMap.values()) {
+//                metrics.collect();
+//            }
+//            for (Map.Entry<String, Map<String, ExchangeMetrics>> metricsEntry : exchangeMetricsMap.entrySet()) {
+//                if (metricsEntry == null) {
+//                    continue;
+//                }
+//                exchangeGauge.labels(metricsEntry.getKey()).set(metricsEntry.getValue().size());
+//                for (ExchangeMetrics metrics : metricsEntry.getValue().values()) {
+//                    metrics.collect();
+//                }
+//            }
+//            exchangeGauge.collect();
+//            for (Map.Entry<String, Map<String, QueueMetrics>> metricsEntry : queueMetricsMap.entrySet()) {
+//                if (metricsEntry == null) {
+//                    continue;
+//                }
+//                queueGauge.labels(metricsEntry.getKey()).set(metricsEntry.getValue().size());
+//                for (QueueMetrics metrics : metricsEntry.getValue().values()) {
+//                    metrics.collect();
+//                }
+//            }
+//            queueGauge.collect();
+//        }
     }
 
     public static class AmqpStatsDisable implements AmqpStats {
@@ -145,10 +164,10 @@ public interface AmqpStats {
 
         }
 
-        @Override
-        public void collect() {
-
-        }
+//        @Override
+//        public void collect() {
+//
+//        }
     }
 
     static AmqpStats create(boolean enableMetrics) {

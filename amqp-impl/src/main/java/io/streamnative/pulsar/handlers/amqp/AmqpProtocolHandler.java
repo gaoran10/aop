@@ -130,7 +130,9 @@ public class AmqpProtocolHandler implements ProtocolHandler {
                 log.error("Failed to start amqp proxy service.");
             }
         }
-        brokerService.getPulsar().addPrometheusRawMetricsProvider(stream -> amqpBrokerService.getAmqpStats().collect());
+//        brokerService.getPulsar().addPrometheusRawMetricsProvider(stream -> {
+//            amqpBrokerService.getAmqpStats().collect();
+//        });
 
         log.info("Starting AmqpProtocolHandler, listener: {}, aop version is: '{}'",
                 getAppliedAmqpListeners(amqpConfig), AopVersion.getVersion());

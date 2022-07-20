@@ -20,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.streamnative.pulsar.handlers.amqp.metcis.AmqpStats;
-import io.streamnative.pulsar.handlers.amqp.metcis.ExchangeMetrics;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;

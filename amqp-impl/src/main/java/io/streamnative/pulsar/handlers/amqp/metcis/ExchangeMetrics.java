@@ -38,7 +38,7 @@ public interface ExchangeMetrics {
 
     void finishRoute(Histogram.Timer timer);
 
-    void collect();
+//    void collect();
 
     class ExchangeMetricsImpl implements ExchangeMetrics {
         @Getter
@@ -173,19 +173,19 @@ public interface ExchangeMetrics {
             timer.observeDuration();
         }
 
-        public void collect() {
-            writeCounter.collect();
-//            writeSuccessCounter.collect();
-            writeFailedCounter.collect();
-//            writeLatency.collect();
-            readCounter.collect();
-            readFailedCounter.collect();
-//            readLatency.collect();
-            ackCounter.collect();
-            routeCounter.collect();
-            routeFailedCounter.collect();
-//            routeLatency.collect();
-        }
+//        public void collect() {
+//            writeCounter.collect();
+////            writeSuccessCounter.collect();
+//            writeFailedCounter.collect();
+////            writeLatency.collect();
+//            readCounter.collect();
+//            readFailedCounter.collect();
+////            readLatency.collect();
+//            ackCounter.collect();
+//            routeCounter.collect();
+//            routeFailedCounter.collect();
+////            routeLatency.collect();
+//        }
     }
 
     static class ExchangeMetricsDisable implements ExchangeMetrics {
@@ -270,10 +270,10 @@ public interface ExchangeMetrics {
 
         }
 
-        @Override
-        public void collect() {
-
-        }
+//        @Override
+//        public void collect() {
+//
+//        }
 
     }
 

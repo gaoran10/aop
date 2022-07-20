@@ -11,7 +11,7 @@ public interface ConnectionMetrics {
 
     void dec();
 
-    void collect();
+//    void collect();
 
     static ConnectionMetrics create(boolean enableMetrics, String vhost) {
         if (enableMetrics) {
@@ -41,9 +41,9 @@ public interface ConnectionMetrics {
             connection.labels(vhost).dec();
         }
 
-        public void collect() {
-            connection.collect();
-        }
+//        public void collect() {
+//            connection.collect();
+//        }
 
     }
 
@@ -63,10 +63,10 @@ public interface ConnectionMetrics {
 
         }
 
-        @Override
-        public void collect() {
-
-        }
+//        @Override
+//        public void collect() {
+//
+//        }
     }
 
 }
