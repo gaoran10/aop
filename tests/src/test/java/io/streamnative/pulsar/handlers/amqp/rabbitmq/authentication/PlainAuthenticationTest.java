@@ -31,7 +31,6 @@ import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import lombok.Cleanup;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -40,26 +39,14 @@ import org.testng.annotations.Test;
  */
 public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
 
-    private void testConnect(int port) throws Exception {
+    private Connection getConnection(int port) throws IOException, TimeoutException {
         ConnectionFactory connectionFactory = new ConnectionFactory();
         connectionFactory.setHost("localhost");
-        connectionFactory.setPort(5672);
+        connectionFactory.setPort(port);
         connectionFactory.setUsername("superUser2");
         connectionFactory.setPassword("superpassword");
-        @Cleanup
-        Connection connection = connectionFactory.newConnection();
-        @Cleanup
-        Channel ignored = connection.createChannel();
-    }
-
-    private Connection getConnection() throws IOException, TimeoutException {
-        ConnectionFactory connectionFactory = new ConnectionFactory();
-        connectionFactory.setHost("localhost");
-        connectionFactory.setPort(5682);
-        connectionFactory.setUsername("superUser2");
-        connectionFactory.setPassword("superpassword2");
-        Connection connection = connectionFactory.newConnection();
-        return connection;
+        connectionFactory.setVirtualHost("vhost1");
+        return connectionFactory.newConnection();
     }
 
     protected void basicDirectConsume() throws Exception {
@@ -67,7 +54,7 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
         String routingKey = "test.key";
         String queueName = randQuName();
 
-        Connection conn = getConnection();
+        Connection conn = getConnection(getAmqpBrokerPortList().get(0));
         Channel channel = conn.createChannel();
 
         channel.exchangeDeclare(exchangeName, "direct", true);
@@ -78,7 +65,7 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
         CountDownLatch countDownLatch = new CountDownLatch(messageCnt);
 
         AtomicInteger consumeIndex = new AtomicInteger(0);
-        channel.basicConsume(queueName, true, "", false, true, null,
+        channel.basicConsume(queueName, false, "", false, true, null,
                 new DefaultConsumer(channel) {
                     @Override
                     public void handleDelivery(String consumerTag,
@@ -90,7 +77,7 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
                         System.out.println("receive msg: " + new String(body));
                         consumeIndex.incrementAndGet();
                         // (process the message components here ...)
-//                        channel.basicAck(deliveryTag, false);
+                        channel.basicAck(deliveryTag, false);
                         countDownLatch.countDown();
                     }
                 });
@@ -113,7 +100,8 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
 
     @Test
     public void testConnectToProxy() throws Exception {
-        testConnect(getAopProxyPortList().get(0));
+        Connection connection = getConnection(getAopProxyPortList().get(0));
+        connection.close();
     }
 
     @Test
@@ -129,6 +117,7 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
 
             @Override
             public LongString handleChallenge(LongString challenge, String username, String password) {
+                // AMQPLAIN encode => username: superUser2, password: superpassword
                 byte[][] data = new byte[][]{{
                         5, 76, 79, 71, 73, 78, 83, 0, 0, 0, 10, 115, 117, 112, 101, 114, 85, 115,
                         101, 114, 50, 8, 80, 65, 83, 83, 87, 79, 82, 68, 83, 0, 0, 0, 13, 115, 117,
