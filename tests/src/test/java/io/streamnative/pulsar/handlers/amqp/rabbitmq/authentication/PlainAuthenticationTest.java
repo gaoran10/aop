@@ -22,13 +22,15 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.LongString;
 import com.rabbitmq.client.PossibleAuthenticationFailureException;
+import com.rabbitmq.client.SaslMechanism;
+import com.rabbitmq.client.impl.LongStringHelper;
 import io.streamnative.pulsar.handlers.amqp.AmqpTokenAuthenticationTestBase;
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import lombok.Cleanup;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -37,6 +39,7 @@ import org.testng.annotations.Test;
  * PlainAuthenticationTest tests the plain authentication.
  */
 public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
+
     private void testConnect(int port) throws Exception {
         ConnectionFactory connectionFactory = new ConnectionFactory();
         connectionFactory.setHost("localhost");
@@ -111,6 +114,30 @@ public class PlainAuthenticationTest extends AmqpTokenAuthenticationTestBase {
     @Test
     public void testConnectToProxy() throws Exception {
         testConnect(getAopProxyPortList().get(0));
+    }
+
+    @Test
+    public void testAMQPLAIN() throws IOException, TimeoutException {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setPort(getAopProxyPortList().get(0));
+        factory.setVirtualHost("vhost1");
+        factory.setSaslConfig(mechanisms -> new SaslMechanism() {
+            @Override
+            public String getName() {
+                return "AMQPLAIN";
+            }
+
+            @Override
+            public LongString handleChallenge(LongString challenge, String username, String password) {
+                byte[][] data = new byte[][]{{
+                        5, 76, 79, 71, 73, 78, 83, 0, 0, 0, 10, 115, 117, 112, 101, 114, 85, 115,
+                        101, 114, 50, 8, 80, 65, 83, 83, 87, 79, 82, 68, 83, 0, 0, 0, 13, 115, 117,
+                        112, 101, 114, 112, 97, 115, 115, 119, 111, 114, 100}};
+                return LongStringHelper.asLongString(data[0]);
+            }
+        });
+        Connection connection = factory.newConnection();
+        connection.close();
     }
 
     private void testConnectWithInvalidToken(int port, boolean isProxy) throws IOException, TimeoutException {
