@@ -47,7 +47,7 @@ public class HttpUtil {
     }
 
     public static String put(String url, Map<String, Object> params) throws IOException {
-        RequestBody requestBody = RequestBody.create(JsonUtil.toString(params), JSON);
+        RequestBody requestBody = RequestBody.create(JSON, JsonUtil.toString(params));
 
         Request.Builder builder = new Request.Builder()
                 .url(url)
@@ -64,7 +64,7 @@ public class HttpUtil {
     }
 
     public static String post(String url, Map<String, Object> params) throws IOException {
-        RequestBody requestBody = RequestBody.create(JsonUtil.toString(params), JSON);
+        RequestBody requestBody = RequestBody.create(JSON, JsonUtil.toString(params));
 
         Request.Builder builder = new Request.Builder()
                 .url(url)

@@ -328,6 +328,10 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     public void deleteCursor(String name) {
         CompletableFuture<ManagedCursor> cursorFuture = cursors.remove(name);
+        if (cursorFuture == null) {
+            log.warn("The queue {} bind to exchange {} is not exist.", name, exchangeName);
+            return;
+        }
         cursorFuture.thenAccept(cursor -> {
             if (cursor != null) {
                 persistentTopic.getManagedLedger().asyncDeleteCursor(cursor.getName(),

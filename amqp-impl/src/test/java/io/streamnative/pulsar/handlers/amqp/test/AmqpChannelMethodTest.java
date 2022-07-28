@@ -292,6 +292,11 @@ public class AmqpChannelMethodTest extends AmqpProtocolTestBase {
         response = (AMQBody) clientChannel.poll(1, TimeUnit.SECONDS);
         Assert.assertTrue(response instanceof QueueDeclareOkBody);
 
+        queueBind(exchange, queue);
+        toServerSender.flush();
+        response = (AMQBody) clientChannel.poll(1, TimeUnit.SECONDS);
+        Assert.assertTrue(response instanceof QueueBindOkBody);
+
         QueueUnbindBody cmd = methodRegistry.createQueueUnbindBody(0, AMQShortString.createAMQShortString(queue),
                 AMQShortString.createAMQShortString(exchange), AMQShortString.createAMQShortString("key"), null);
         cmd.generateFrame(1).writePayload(toServerSender);

@@ -174,7 +174,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         this.exchangeService.exchangeDeclare(connection.getNamespaceName(), exchange.toString(), type.toString(),
                 passive, durable, autoDelete, internal, arguments).thenAccept(__ -> {
             if (!nowait) {
-                connection.writeFrame(
+                connection.writeAndFlushFrame(
                         connection.getMethodRegistry().createExchangeDeclareOkBody().generateFrame(channelId));
             }
         }).exceptionally(t -> {
@@ -196,7 +196,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         exchangeService.exchangeDelete(connection.getNamespaceName(), exchange.toString(), ifUnused)
                 .thenAccept(__ -> {
                     ExchangeDeleteOkBody responseBody = connection.getMethodRegistry().createExchangeDeleteOkBody();
-                    connection.writeFrame(responseBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 })
                 .exceptionally(t -> {
                     log.error("Failed to delete exchange {} in vhost {}.",
@@ -232,7 +232,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                     MethodRegistry methodRegistry = connection.getMethodRegistry();
                     ExchangeBoundOkBody exchangeBoundOkBody = methodRegistry
                             .createExchangeBoundOkBody(replyCode, AMQShortString.validValueOf(replyText));
-                    connection.writeFrame(exchangeBoundOkBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(exchangeBoundOkBody.generateFrame(channelId));
                 })
                 .exceptionally(t -> {
                     log.error("Failed to bound queue {} to exchange {} with routingKey {} in vhost {}",
@@ -256,7 +256,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             QueueDeclareOkBody responseBody = methodRegistry.createQueueDeclareOkBody(
                     AMQShortString.createAMQShortString(amqpQueue.getName()), 0, 0);
-            connection.writeFrame(responseBody.generateFrame(channelId));
+            connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
             log.error("Failed to declare queue {} in vhost {}", queue, connection.getNamespaceName(), t);
             handleAoPException(t);
@@ -276,7 +276,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                 connection.getConnectionId()).thenAccept(__ -> {
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             AMQMethodBody responseBody = methodRegistry.createQueueBindOkBody();
-            connection.writeFrame(responseBody.generateFrame(channelId));
+            connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
             log.error("Failed to bind queue {} to exchange {}.", queue, exchange, t);
             handleAoPException(t);
@@ -293,7 +293,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                 .thenAccept(__ -> {
                     MethodRegistry methodRegistry = connection.getMethodRegistry();
                     AMQMethodBody responseBody = methodRegistry.createQueuePurgeOkBody(0);
-                    connection.writeFrame(responseBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 }).exceptionally(t -> {
                     log.error("Failed to purge queue {} in vhost {}", queue, connection.getNamespaceName(), t);
                     handleAoPException(t);
@@ -312,7 +312,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
                 .thenAccept(__ -> {
                     MethodRegistry methodRegistry = connection.getMethodRegistry();
                     QueueDeleteOkBody responseBody = methodRegistry.createQueueDeleteOkBody(0);
-                    connection.writeFrame(responseBody.generateFrame(channelId));
+                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 })
                 .exceptionally(t -> {
                     log.error("Failed to delete queue " + queue, t);
@@ -345,7 +345,7 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
         queueService.queueUnbind(connection.getNamespaceName(), queue.toString(), exchange.toString(),
                 bindingKey.toString(), arguments, connection.getConnectionId()).thenAccept(__ -> {
             AMQMethodBody responseBody = connection.getMethodRegistry().createQueueUnbindOkBody();
-            connection.writeFrame(responseBody.generateFrame(channelId));
+            connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
             log.error("Failed to unbind queue {} with exchange {} in vhost {}",
                     queue, exchange, connection.getNamespaceName(), t);
