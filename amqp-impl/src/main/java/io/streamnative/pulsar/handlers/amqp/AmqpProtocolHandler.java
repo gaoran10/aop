@@ -35,6 +35,10 @@ import org.apache.pulsar.broker.authentication.AuthenticationProviderToken;
 import org.apache.pulsar.broker.protocol.ProtocolHandler;
 import org.apache.pulsar.broker.service.BrokerService;
 import org.apache.pulsar.policies.data.loadbalancer.AdvertisedListener;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
+import org.glassfish.jersey.servlet.ServletContainer;
 
 /**
  * Amqp Protocol Handler load and run by Pulsar Service.
@@ -54,10 +58,11 @@ public class AmqpProtocolHandler implements ProtocolHandler {
     private BrokerService brokerService;
     @Getter
     private String bindAddress;
-
+    @Getter
     private AmqpBrokerService amqpBrokerService;
     @Getter
     private Map<String, AuthenticationProvider> authMap = new HashMap<>();
+    private Server webServer;
 
     @Override
     public String protocolName() {
@@ -130,10 +135,7 @@ public class AmqpProtocolHandler implements ProtocolHandler {
                 log.error("Failed to start amqp proxy service.");
             }
         }
-//        brokerService.getPulsar().addPrometheusRawMetricsProvider(stream -> {
-//            amqpBrokerService.getAmqpStats().collect();
-//        });
-
+        startAdminResource(amqpConfig.getAmqpAdminPort());
         log.info("Starting AmqpProtocolHandler, listener: {}, aop version is: '{}'",
                 getAppliedAmqpListeners(amqpConfig), AopVersion.getVersion());
         log.info("Git Revision {}", AopVersion.getGitSha());
@@ -141,6 +143,27 @@ public class AmqpProtocolHandler implements ProtocolHandler {
             AopVersion.getBuildUser(),
             AopVersion.getBuildHost(),
             AopVersion.getBuildTime());
+    }
+
+    private void startAdminResource(int port) {
+        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
+        context.setContextPath("/api");
+        context.setAttribute("aop", this);
+
+        webServer = new Server(port);
+        webServer.setHandler(context);
+
+        ServletHolder jerseyServlet = context.addServlet(ServletContainer.class, "/*");
+        jerseyServlet.setInitOrder(0);
+
+        jerseyServlet.setInitParameter(
+                "jersey.config.server.provider.packages", "io.streamnative.pulsar.handlers.amqp.admin");
+
+        try {
+            webServer.start();
+        } catch (Exception e) {
+            log.error("Failed to start web service for aop", e);
+        }
     }
 
     // this is called after initialize, and with amqpConfig, brokerService all set.
@@ -177,6 +200,11 @@ public class AmqpProtocolHandler implements ProtocolHandler {
 
     @Override
     public void close() {
+        try {
+            webServer.stop();
+        } catch (Exception e) {
+            log.error("Failed to stop web server for aop", e);
+        }
     }
 
     public static int getListenerPort(String listener) {

@@ -100,6 +100,14 @@ public class AmqpServiceConfiguration extends ServiceConfiguration {
 
     @FieldContext(
             category = CATEGORY_AMQP,
+            required = true,
+            doc = "The aop admin service port"
+    )
+    private int amqpAdminPort = 15673;
+
+
+    @FieldContext(
+            category = CATEGORY_AMQP,
             required = false,
             doc = "Whether enable amqp metrics"
     )

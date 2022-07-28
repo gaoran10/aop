@@ -790,7 +790,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
     }
 
     public boolean isCompressionSupported() {
-        return true;
+        return false;
     }
 
     public int getMessageCompressionThreshold() {

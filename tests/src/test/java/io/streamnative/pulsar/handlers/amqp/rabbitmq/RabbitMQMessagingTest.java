@@ -388,9 +388,55 @@ public class RabbitMQMessagingTest extends AmqpTestBase {
         } catch (InterruptedException e) {
             // ignored
         }
-        Assert.assertEquals(messageCnt, consumeIndex2.get());
+        Assert.assertTrue(consumeIndex2.get() >= messageCnt);
         channel3.close();
         conn.close();
+    }
+
+    @Test(timeOut = 1000 * 5)
+    public void largeMessageTest() throws IOException, TimeoutException, InterruptedException {
+
+        final String vhost = "vhost1";
+        final int msgSize = 101 * 1024;
+        final String exchangeName = randExName();
+        final String queueName1 = randQuName();
+
+        @Cleanup
+        Connection connection = getConnection(vhost, false);
+        @Cleanup
+        Channel channel = connection.createChannel();
+
+        channel.exchangeDeclare(exchangeName, BuiltinExchangeType.FANOUT, true);
+        channel.queueDeclare(queueName1, true, false, false, null);
+        channel.queueBind(queueName1, exchangeName, "");
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < msgSize; i++) {
+            sb.append("a");
+        }
+        String contentMsg = sb.toString();
+        channel.basicPublish(exchangeName, "", null, contentMsg.getBytes());
+
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        final AtomicInteger count = new AtomicInteger(0);
+
+        channel.basicConsume(queueName1, false, "myConsumerTag",
+                new DefaultConsumer(channel) {
+                    @Override
+                    public void handleDelivery(String consumerTag,
+                                               Envelope envelope,
+                                               AMQP.BasicProperties properties,
+                                               byte[] body) throws IOException {
+                        String message = new String(body, "UTF-8");
+                        Assert.assertEquals(message, contentMsg);
+                        count.incrementAndGet();
+                        countDownLatch.countDown();
+                    }
+                });
+
+        countDownLatch.await();
+        Assert.assertTrue(count.get() == 1);
+
     }
 
     private Channel createConsumer(String exchangeName, String routingKey, String queueName, Connection conn,
