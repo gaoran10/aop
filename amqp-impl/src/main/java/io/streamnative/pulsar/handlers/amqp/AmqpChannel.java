@@ -179,8 +179,8 @@ public class AmqpChannel implements ServerChannelMethodProcessor {
             }
         }).exceptionally(t -> {
             log.error("Failed to declare exchange {} in vhost {}. type: {}, passive: {}, durable: {}, "
-                            + "autoDelete: {}, nowait: {}", type, passive, durable, autoDelete, nowait,
-                    exchange, connection.getNamespaceName(), t);
+                            + "autoDelete: {}, nowait: {}, arguments: {}", exchange, connection.getNamespaceName(),
+                    type, passive, durable, autoDelete, nowait, arguments, t);
             handleAoPException(t);
             return null;
         });

@@ -58,7 +58,11 @@ public class ExchangeServiceImpl implements ExchangeService {
             createIfMissing = true;
             exchangeType = getExchangeType(exchange);
         } else {
-            exchangeType = type;
+            if ("x-delayed-message".equalsIgnoreCase(type)) {
+                exchangeType = arguments.get("x-delayed-type").toString();
+            } else {
+                exchangeType = type;
+            }
         }
         CompletableFuture<AmqpExchange> future = new CompletableFuture<>();
         exchangeContainer.asyncGetExchange(namespaceName, formatExchangeName(exchange), createIfMissing, exchangeType)
@@ -73,7 +77,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                                 "Get empty exchange " + exchange + " in vhost " + namespaceName, true, false));
                         return;
                     }
-                    if (!ex.getType().toString().equalsIgnoreCase(exchangeType)) {
+                    if (!ex.getType().toString().equalsIgnoreCase(exchangeType.replace("-", "_"))) {
                         future.completeExceptionally(new AoPException(ErrorCodes.NOT_ALLOWED,
                                 "Attempt to redeclare exchange: '" + exchange + "' of type " + ex.getType()
                                         + " to " + exchangeType + ".", false, true));

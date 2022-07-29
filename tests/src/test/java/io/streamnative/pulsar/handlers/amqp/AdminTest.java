@@ -41,13 +41,21 @@ public class AdminTest extends AmqpTestBase{
         Connection connection = getConnection("vhost1", true);
         Channel channel = connection.createChannel();
         Set<String> vhost1Exs = new HashSet<>();
+        Map<String, Object> header = new HashMap<>();
+        header.put("x-delayed-type", "direct");
         for (int i = 0; i < 3; i++) {
             String ex = randExName();
             vhost1Exs.add(ex);
-            channel.exchangeDeclare(ex, BuiltinExchangeType.DIRECT, true);
+            channel.exchangeDeclare(ex, "x-delayed-message", true, false, header);
         }
+        String consistentEx = randExName();
+        channel.exchangeDeclare(consistentEx, "x-consistent-hash", true);
+        channel.basicPublish(consistentEx, "10", null, "".getBytes());
         String ex1 = vhost1Exs.iterator().next();
 
+        admin.topics().createNonPartitionedTopic("persistent://public/vhost1/__amqp_exchange__xx");
+
+//        Thread.sleep(1000 * 60 * 60);
         Connection connection2 = getConnection("vhost2", true);
         Channel channel2 = connection2.createChannel();
         Set<String> vhost2Exs = new HashSet<>();

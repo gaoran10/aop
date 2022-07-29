@@ -92,12 +92,12 @@ public class ExchangeContainer {
                 if (throwable != null) {
                     log.error("[{}][{}] Failed to get exchange topic.", namespaceName, exchangeName, throwable);
                     amqpExchangeCompletableFuture.completeExceptionally(throwable);
-                    removeExchangeFuture(namespaceName, exchangeName);
+                    removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
                 } else {
                     if (null == topic) {
                         log.warn("[{}][{}] The exchange topic did not exist.", namespaceName, exchangeName);
                         amqpExchangeCompletableFuture.complete(null);
-                        removeExchangeFuture(namespaceName, exchangeName);
+                        removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
                     } else {
                         // recover metadata if existed
                         PersistentTopic persistentTopic = (PersistentTopic) topic;
@@ -110,6 +110,11 @@ public class ExchangeContainer {
                             amqpExchangeType = AmqpExchange.Type.value(type);
                         } else {
                             amqpExchangeType = AmqpExchange.Type.value(exchangeType);
+                        }
+                        if (amqpExchangeType == null) {
+                            amqpExchangeCompletableFuture.completeExceptionally(
+                                    new RuntimeException("Unknown type for exchange " + exchangeName));
+                            removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
                         }
                         PersistentExchange amqpExchange = new PersistentExchange(exchangeName,
                                 amqpExchangeType, persistentTopic, false,
@@ -132,12 +137,17 @@ public class ExchangeContainer {
         if (StringUtils.isEmpty(exchangeName)) {
             return;
         }
-        removeExchangeFuture(namespaceName, exchangeName);
+        removeExchangeFuture(namespaceName, exchangeName, null);
     }
 
-    private void removeExchangeFuture(NamespaceName namespaceName, String exchangeName) {
+    private void removeExchangeFuture(NamespaceName namespaceName, String exchangeName,
+                                      CompletableFuture<AmqpExchange> future) {
         if (exchangeMap.containsKey(namespaceName)) {
-            exchangeMap.get(namespaceName).remove(exchangeName);
+            if (future != null) {
+                exchangeMap.get(namespaceName).remove(exchangeName, future);
+            } else {
+                exchangeMap.get(namespaceName).remove(exchangeName);
+            }
         }
         amqpStats.deleteExchangeMetrics(namespaceName.getLocalName(), exchangeName);
     }

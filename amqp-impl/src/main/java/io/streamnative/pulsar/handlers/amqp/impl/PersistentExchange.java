@@ -107,10 +107,14 @@ public class PersistentExchange extends AbstractAmqpExchange {
                             for (AmqpQueue queue : queueSet) {
                                 routeFutureList.add(
                                         queue.writeIndexMessageAsync(
-                                                exchangeName, position.getLedgerId(), position.getEntryId()));
+                                                exchangeName, position.getLedgerId(), position.getEntryId(), props));
                             }
                         } else {
+                            int queueIndex = 0;
+                            props.put("__queueCount", queues.size());
                             for (AmqpQueue queue : queues) {
+                                queueIndex ++;
+                                props.put("__queueIndex", queueIndex);
                                 CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
                                         position.getLedgerId(), position.getEntryId(),
                                         props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),

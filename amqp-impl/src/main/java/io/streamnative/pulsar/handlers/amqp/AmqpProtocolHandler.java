@@ -24,7 +24,9 @@ import io.streamnative.pulsar.handlers.amqp.proxy.ProxyConfiguration;
 import io.streamnative.pulsar.handlers.amqp.proxy.ProxyService;
 import io.streamnative.pulsar.handlers.amqp.utils.ConfigurationUtils;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -34,8 +36,14 @@ import org.apache.pulsar.broker.authentication.AuthenticationProvider;
 import org.apache.pulsar.broker.authentication.AuthenticationProviderToken;
 import org.apache.pulsar.broker.protocol.ProtocolHandler;
 import org.apache.pulsar.broker.service.BrokerService;
+import org.apache.pulsar.broker.web.JettyRequestLogFactory;
 import org.apache.pulsar.policies.data.loadbalancer.AdvertisedListener;
+import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.handler.ContextHandlerCollection;
+import org.eclipse.jetty.server.handler.DefaultHandler;
+import org.eclipse.jetty.server.handler.HandlerCollection;
+import org.eclipse.jetty.server.handler.RequestLogHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.glassfish.jersey.servlet.ServletContainer;
@@ -150,8 +158,14 @@ public class AmqpProtocolHandler implements ProtocolHandler {
         context.setContextPath("/api");
         context.setAttribute("aop", this);
 
+        RequestLogHandler requestLogHandler = new RequestLogHandler();
+        requestLogHandler.setRequestLog(JettyRequestLogFactory.createRequestLogger());
+
+        HandlerCollection handlerCollection = new HandlerCollection();
+        handlerCollection.setHandlers(new Handler[] { context, new DefaultHandler(), requestLogHandler });
+
         webServer = new Server(port);
-        webServer.setHandler(context);
+        webServer.setHandler(handlerCollection);
 
         ServletHolder jerseyServlet = context.addServlet(ServletContainer.class, "/*");
         jerseyServlet.setInitOrder(0);

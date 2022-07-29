@@ -34,7 +34,8 @@ public interface AmqpExchange {
         Direct,
         Fanout,
         Topic,
-        Headers;
+        Headers,
+        X_CONSISTENT_HASH;
 
         public static Type value(String type) {
             if (type == null || type.length() == 0) {
@@ -50,6 +51,8 @@ public interface AmqpExchange {
                     return Topic;
                 case "headers":
                     return Headers;
+                case "x-consistent-hash":
+                    return X_CONSISTENT_HASH;
                 default:
                     return null;
             }

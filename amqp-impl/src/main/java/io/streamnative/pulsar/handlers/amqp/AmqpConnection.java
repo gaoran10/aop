@@ -658,7 +658,9 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
                         AmqpConnection.this.remoteAddress.toString());
                     AmqpConnection.this.close();
                 } else if (event.state().equals(IdleState.WRITER_IDLE)) {
-                    log.warn("heartbeat write  idle [{}]", AmqpConnection.this.remoteAddress.toString());
+                    if (log.isDebugEnabled()) {
+                        log.debug("heartbeat write  idle [{}]", AmqpConnection.this.remoteAddress.toString());
+                    }
                     writeAndFlushFrame(HeartbeatBody.FRAME);
                 }
             }

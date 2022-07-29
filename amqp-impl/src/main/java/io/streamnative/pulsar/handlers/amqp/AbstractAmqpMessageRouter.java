@@ -13,6 +13,7 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import io.streamnative.pulsar.handlers.amqp.impl.ConsistentHashRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.DirectMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.FanoutMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.HeadersMessageRouter;
@@ -106,6 +107,8 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
                 return new TopicMessageRouter();
             case Headers:
                 return new HeadersMessageRouter();
+            case X_CONSISTENT_HASH:
+                return new ConsistentHashRouter();
             default:
                 return null;
         }

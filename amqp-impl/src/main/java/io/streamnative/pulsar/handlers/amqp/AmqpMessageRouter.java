@@ -33,7 +33,8 @@ public interface AmqpMessageRouter {
         Direct,
         Fanout,
         Topic,
-        Headers;
+        Headers,
+        Consistent_Hash;
     }
 
     /**

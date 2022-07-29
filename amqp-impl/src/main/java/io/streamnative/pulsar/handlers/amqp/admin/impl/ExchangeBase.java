@@ -22,14 +22,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.util.FutureUtil;
+import org.apache.qpid.server.protocol.v0_8.FieldTable;
 
 /**
  * Exchange base.
  */
-
+@Slf4j
 public class ExchangeBase extends BaseResources {
 
     protected CompletableFuture<List<ExchangeBean>> getExchangeListAsync() {
@@ -47,31 +49,46 @@ public class ExchangeBase extends BaseResources {
     private CompletableFuture<List<String>> getExchangeListAsync(String tenant, String ns) {
         return namespaceService()
                 .getFullListOfTopics(NamespaceName.get(tenant, ns))
+                .exceptionally(t -> {
+                    log.error("Failed to get exchange list for vhost {} in tenant {}", ns, tenant, t);
+                    return new ArrayList<>();
+                })
                 .thenApply(list -> list.stream().filter(s ->
                         s.contains(PersistentExchange.TOPIC_PREFIX)).collect(Collectors.toList()));
     }
 
     protected CompletableFuture<List<ExchangeBean>> getExchangeListByVhostAsync(String vhost) {
+        List<ExchangeBean> beanList = new ArrayList<>();
         return getExchangeListAsync(tenant, vhost).thenCompose(exList -> {
             Collection<CompletableFuture<Void>> futureList = new ArrayList<>();
-            List<ExchangeBean> beanList = new ArrayList<>();
             exList.forEach(topic -> {
                 String exchangeName = TopicName.get(topic).getLocalName()
                         .substring(PersistentExchange.TOPIC_PREFIX.length());
+                log.info("get exchange bean {} in list", exchangeName);
                 futureList.add(getExchangeBeanAsync(vhost, exchangeName).thenAccept(beanList::add));
             });
-            return FutureUtil.waitForAll(futureList).thenApply(__ -> beanList);
-        });
+            return FutureUtil.waitForAll(futureList);
+        }).thenApply(__ -> beanList);
     }
 
     protected CompletableFuture<ExchangeBean> getExchangeBeanAsync(String vhost, String exchangeName) {
         return exchangeContainer().asyncGetExchange(
                 NamespaceName.get(tenant, vhost), exchangeName, false, null).thenApply(ex -> {
+                    log.info("get exchange bean {}", exchangeName);
             ExchangeBean exchangeBean = new ExchangeBean();
             exchangeBean.setName(exchangeName);
             exchangeBean.setType(ex.getType().toString().toLowerCase());
             exchangeBean.setVhost(vhost);
             exchangeBean.setAutoDelete(ex.getAutoDelete());
+            exchangeBean.setInternal(false);
+            return exchangeBean;
+        }).exceptionally(t -> {
+            log.error("Failed to get exchange bean for exchange {} in vhost {}", exchangeName, vhost, t);
+            ExchangeBean exchangeBean = new ExchangeBean();
+            exchangeBean.setName(exchangeName);
+            exchangeBean.setType("unknown type");
+            exchangeBean.setVhost(vhost);
+            exchangeBean.setAutoDelete(false);
             exchangeBean.setInternal(false);
             return exchangeBean;
         });
@@ -81,7 +98,7 @@ public class ExchangeBase extends BaseResources {
                                                               ExchangeDeclareParams declareParams) {
         return exchangeService().exchangeDeclare(NamespaceName.get(tenant, vhost), exchangeName,
                 declareParams.getType(), false, declareParams.isDurable(), declareParams.isAutoDelete(),
-                declareParams.isInternal(), null);
+                declareParams.isInternal(), FieldTable.convertToFieldTable(declareParams.getArguments()));
     }
 
     protected CompletableFuture<Void> deleteExchange(String vhost, String exchangeName, boolean ifUnused) {

@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.util.FutureUtil;
@@ -30,6 +31,7 @@ import org.apache.pulsar.common.util.FutureUtil;
 /**
  * QueueBase.
  */
+@Slf4j
 public class QueueBase extends BaseResources {
 
     protected CompletableFuture<List<QueueBean>> getQueueListAsync() {
@@ -60,6 +62,10 @@ public class QueueBase extends BaseResources {
     private CompletableFuture<List<String>> getQueueListAsync(String tenant, String ns) {
         return namespaceService()
                 .getFullListOfTopics(NamespaceName.get(tenant, ns))
+                .exceptionally(t -> {
+                    log.error("Failed to get queue list for vhost {} in tenant {}", ns, tenant, t);
+                    return new ArrayList<>();
+                })
                 .thenApply(list -> list.stream().filter(s ->
                         s.contains(PersistentQueue.TOPIC_PREFIX)).collect(Collectors.toList()));
     }
