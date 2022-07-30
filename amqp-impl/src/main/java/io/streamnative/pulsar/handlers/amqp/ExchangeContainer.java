@@ -15,11 +15,11 @@
 package io.streamnative.pulsar.handlers.amqp;
 
 import io.streamnative.pulsar.handlers.amqp.impl.PersistentExchange;
+import io.streamnative.pulsar.handlers.amqp.metcis.AmqpStats;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-
-import io.streamnative.pulsar.handlers.amqp.metcis.AmqpStats;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -51,11 +51,11 @@ public class ExchangeContainer {
     /**
      * Get or create exchange.
      *
-     * @param namespaceName namespace used in pulsar
-     * @param exchangeName name of exchange
+     * @param namespaceName   namespace used in pulsar
+     * @param exchangeName    name of exchange
      * @param createIfMissing true to create the exchange if not existed, and exchangeType should be not null
      *                        false to get the exchange and return null if not existed
-     * @param exchangeType type of exchange: direct,fanout,topic and headers
+     * @param exchangeType    type of exchange: direct,fanout,topic and headers
      * @return the completableFuture of get result
      */
     public CompletableFuture<AmqpExchange> asyncGetExchange(NamespaceName namespaceName,
@@ -102,14 +102,14 @@ public class ExchangeContainer {
                         // recover metadata if existed
                         PersistentTopic persistentTopic = (PersistentTopic) topic;
                         Map<String, String> properties = persistentTopic.getManagedLedger().getProperties();
-                        AmqpExchange.Type amqpExchangeType;
+                        ExchangeType amqpExchangeType;
                         // if properties has type, ignore the exchangeType
                         if (null != properties && properties.size() > 0
                                 && null != properties.get(PersistentExchange.TYPE)) {
                             String type = properties.get(PersistentExchange.TYPE);
-                            amqpExchangeType = AmqpExchange.Type.value(type);
+                            amqpExchangeType = ExchangeType.value(type);
                         } else {
-                            amqpExchangeType = AmqpExchange.Type.value(exchangeType);
+                            amqpExchangeType = ExchangeType.value(exchangeType);
                         }
                         if (amqpExchangeType == null) {
                             amqpExchangeCompletableFuture.completeExceptionally(
@@ -119,6 +119,15 @@ public class ExchangeContainer {
                         PersistentExchange amqpExchange = new PersistentExchange(exchangeName,
                                 amqpExchangeType, persistentTopic, false,
                                 amqpStats.addExchangeMetrics(namespaceName.getLocalName(), exchangeName));
+                        try {
+                            amqpExchange.recover(properties, this, namespaceName);
+                        } catch (Exception e) {
+                            log.error("[{}][{}] Failed to recover routers for exchange from properties.",
+                                    namespaceName, exchangeName, e);
+                            amqpExchangeCompletableFuture.completeExceptionally(e);
+                            removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
+                            return;
+                        }
                         amqpExchangeCompletableFuture.complete(amqpExchange);
                     }
                 }
@@ -131,7 +140,7 @@ public class ExchangeContainer {
      * Delete the exchange by namespace and exchange name.
      *
      * @param namespaceName namespace name in pulsar
-     * @param exchangeName name of exchange
+     * @param exchangeName  name of exchange
      */
     public void deleteExchange(NamespaceName namespaceName, String exchangeName) {
         if (StringUtils.isEmpty(exchangeName)) {

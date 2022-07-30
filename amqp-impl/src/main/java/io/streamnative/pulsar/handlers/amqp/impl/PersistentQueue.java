@@ -18,7 +18,6 @@ import static org.apache.curator.shaded.com.google.common.base.Preconditions.che
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.prometheus.client.Histogram;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpQueue;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
@@ -28,6 +27,7 @@ import io.streamnative.pulsar.handlers.amqp.AmqpQueueProperties;
 import io.streamnative.pulsar.handlers.amqp.ExchangeContainer;
 import io.streamnative.pulsar.handlers.amqp.IndexMessage;
 import io.streamnative.pulsar.handlers.amqp.metcis.QueueMetrics;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
 import java.util.ArrayList;
@@ -163,7 +163,7 @@ public class PersistentQueue extends AbstractAmqpQueue {
                     exchangeContainer.asyncGetExchange(namespaceName, exchangeName, false, null);
             amqpExchangeCompletableFuture.whenComplete((amqpExchange, throwable) -> {
                 AmqpMessageRouter messageRouter = AbstractAmqpMessageRouter.
-                        generateRouter(AmqpExchange.Type.value(amqpQueueProperty.getType().toString()));
+                        generateRouter(ExchangeType.value(amqpQueueProperty.getType().toString()));
                 messageRouter.setQueue(this);
                 messageRouter.setExchange(amqpExchange);
                 messageRouter.setArguments(arguments);

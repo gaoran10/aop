@@ -21,6 +21,7 @@ import static io.streamnative.pulsar.handlers.amqp.utils.ExchangeUtil.isDefaultE
 
 import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
@@ -165,4 +166,37 @@ public class ExchangeServiceImpl implements ExchangeService {
         return future;
     }
 
+    @Override
+    public CompletableFuture<Void> exchangeBind(NamespaceName namespaceName, String destination, String source,
+                                                String bindingKey, Map<String, Object> params) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        exchangeContainer.asyncGetExchange(namespaceName, source, false, null)
+                .thenCombine(exchangeContainer.asyncGetExchange(namespaceName, destination, false, null),
+                        (sourceEx, desEx) -> desEx.bindExchange(sourceEx, bindingKey, params))
+                .thenAccept(__ -> {
+                    future.complete(null);
+                })
+                .exceptionally(t -> {
+                    future.completeExceptionally(t);
+                    return null;
+                });
+        return future;
+    }
+
+    @Override
+    public CompletableFuture<Void> exchangeUnbind(NamespaceName namespaceName, String destination, String source,
+                                                  String bindingKey, Map<String, Object> params) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        exchangeContainer.asyncGetExchange(namespaceName, source, false, null)
+                .thenCombine(exchangeContainer.asyncGetExchange(namespaceName, destination, false, null),
+                        (sourceEx, desEx) -> desEx.unbindExchange(sourceEx, bindingKey, params))
+                .thenAccept(__ -> {
+                    future.complete(null);
+                })
+                .exceptionally(t -> {
+                    future.completeExceptionally(t);
+                    return null;
+                });
+        return future;
+    }
 }

@@ -14,6 +14,7 @@
 
 package io.streamnative.pulsar.handlers.amqp;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.qpid.server.protocol.v0_8.FieldTable;
@@ -57,4 +58,10 @@ public interface ExchangeService {
      */
     CompletableFuture<Integer> exchangeBound(NamespaceName namespaceName, String exchange, String routingKey,
                                           String queueName);
+
+    CompletableFuture<Void> exchangeBind(NamespaceName namespaceName, String destination, String source,
+                                         String bindingKey, Map<String, Object> params);
+
+    CompletableFuture<Void> exchangeUnbind(NamespaceName namespaceName, String destination, String source,
+                                         String bindingKey, Map<String, Object> params);
 }
