@@ -13,7 +13,10 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.Position;
 import org.apache.pulsar.broker.service.Topic;
@@ -25,37 +28,6 @@ import org.apache.pulsar.client.api.Message;
  * to write messages and read messages.
  */
 public interface AmqpExchange {
-
-    /**
-     * Exchange type, corresponding to AMQP protocol.
-     *
-     */
-    enum Type{
-        Direct,
-        Fanout,
-        Topic,
-        Headers;
-
-        public static Type value(String type) {
-            if (type == null || type.length() == 0) {
-                return null;
-            }
-            type = type.toLowerCase();
-            switch (type) {
-                case "direct":
-                    return Direct;
-                case "fanout":
-                    return Fanout;
-                case "topic":
-                    return Topic;
-                case "headers":
-                    return Headers;
-                default:
-                    return null;
-            }
-        }
-
-    }
 
     /**
      * Get the name of the exchange.
@@ -71,10 +43,10 @@ public interface AmqpExchange {
     Topic getTopic();
 
     /**
-     * Get the type {@link Type} of the exchange.
+     * Get the type {@link ExchangeType} of the exchange.
      * @return the type of the exchange.
      */
-    AmqpExchange.Type getType();
+    ExchangeType getType();
 
     /**
      * Write AMQP message to the exchange.
@@ -140,5 +112,43 @@ public interface AmqpExchange {
     void removeQueue(AmqpQueue queue);
 
     int getQueueSize();
+
+    /**
+     * This method is used by destination exchange;
+     * @param sourceEx
+     * @param routingKey
+     * @param params
+     * @return
+     */
+    CompletableFuture<Void> bindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params);
+
+    /**
+     * This method is used by destination exchange;
+     * @param sourceEx
+     * @param routingKey
+     * @param params
+     */
+    void unbindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params);
+
+    /**
+     * This method is used by source exchange;
+     * @param destinationEx
+     * @param routingKey
+     * @param params
+     */
+    CompletableFuture<Void> addExchange(AmqpExchange destinationEx, String routingKey,
+                                        Map<String, Object> params);
+
+    /**
+     * This method is used by source exchange;
+     * @param destinationEx
+     * @param routingKey
+     * @param params
+     */
+    void removeExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params);
+
+    int getExchangeSize();
+
+    AmqpMessageRouter getRouter(String sourceEx);
 
 }

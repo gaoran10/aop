@@ -13,8 +13,12 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
+
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Base class of AMQP exchange.
@@ -22,19 +26,28 @@ import java.util.Set;
 public abstract class AbstractAmqpExchange implements AmqpExchange {
 
     protected final String exchangeName;
-    protected final AmqpExchange.Type exchangeType;
+    protected final ExchangeType exchangeType;
     protected Set<AmqpQueue> queues;
     protected boolean durable;
     protected boolean autoDelete;
     public static final String DEFAULT_EXCHANGE_DURABLE = "aop.direct.durable";
 
-    protected AbstractAmqpExchange(String exchangeName, AmqpExchange.Type exchangeType,
-                                   Set<AmqpQueue> queues, boolean durable, boolean autoDelete) {
+    protected Set<AmqpExchange> exchanges;
+    protected Map<String, Set<AmqpExchange>> bindingKeyExchangeMap;
+    protected Map<String, AmqpMessageRouter> routerMap = new ConcurrentHashMap<>();
+
+    protected AbstractAmqpExchange(String exchangeName, ExchangeType exchangeType,
+                                   Set<AmqpQueue> queues, Set<AmqpExchange> exchanges,
+                                   boolean durable, boolean autoDelete) {
         this.exchangeName = exchangeName;
         this.exchangeType = exchangeType;
         this.queues = queues;
+        this.exchanges = exchanges;
         this.durable = durable;
         this.autoDelete = autoDelete;
+        if (this.exchangeType == ExchangeType.DIRECT) {
+            bindingKeyExchangeMap = new ConcurrentHashMap<>();
+        }
     }
 
     @Override
@@ -68,7 +81,7 @@ public abstract class AbstractAmqpExchange implements AmqpExchange {
     }
 
     @Override
-    public AmqpExchange.Type getType() {
+    public ExchangeType getType() {
         return exchangeType;
     }
 

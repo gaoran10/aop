@@ -13,21 +13,30 @@
  */
 package io.streamnative.pulsar.handlers.amqp.impl;
 
+import static io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils.PROP_EXCHANGE;
 import static org.apache.curator.shaded.com.google.common.base.Preconditions.checkArgument;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.google.common.collect.Sets;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpExchange;
+import io.streamnative.pulsar.handlers.amqp.AbstractAmqpMessageRouter;
+import io.streamnative.pulsar.handlers.amqp.AmqpBinding;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
+import io.streamnative.pulsar.handlers.amqp.AmqpExchange;
+import io.streamnative.pulsar.handlers.amqp.AmqpExchangeProperties;
 import io.streamnative.pulsar.handlers.amqp.AmqpExchangeReplicator;
+import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueue;
+import io.streamnative.pulsar.handlers.amqp.ExchangeContainer;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -58,6 +67,8 @@ import org.apache.pulsar.common.util.collections.ConcurrentOpenHashMap;
 public class PersistentExchange extends AbstractAmqpExchange {
     public static final String EXCHANGE = "EXCHANGE";
     public static final String QUEUES = "QUEUES";
+    public static final String DES_EXCHANGES = "DES_EXCHANGES";
+    public static final String BINDINGS = "BINDINGS";
     public static final String TYPE = "TYPE";
     public static final String TOPIC_PREFIX = "__amqp_exchange__";
 
@@ -67,8 +78,8 @@ public class PersistentExchange extends AbstractAmqpExchange {
     private AmqpExchangeReplicator messageReplicator;
     private AmqpEntryWriter amqpEntryWriter;
 
-    public PersistentExchange(String exchangeName, Type type, PersistentTopic persistentTopic, boolean autoDelete) {
-        super(exchangeName, type, new HashSet<>(), true, autoDelete);
+    public PersistentExchange(String exchangeName, ExchangeType type, PersistentTopic persistentTopic, boolean autoDelete) {
+        super(exchangeName, type, Sets.newConcurrentHashSet(), Sets.newConcurrentHashSet(), true, autoDelete);
         this.persistentTopic = persistentTopic;
         topicNameValidate();
         updateExchangeProperties();
@@ -92,12 +103,27 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         log.error("Deserialize entry dataBuffer failed. exchangeName: {}", exchangeName, e);
                         return FutureUtil.failedFuture(e);
                     }
+                    log.info("[{}] route message with key {}", exchangeName, props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString());
                     List<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
                     for (AmqpQueue queue : queues) {
                         CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessage(
                                 entry.getLedgerId(), entry.getEntryId(),
                                 props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
                                 props);
+                        routeFutureList.add(routeFuture);
+                    }
+                    for (AmqpExchange exchange : exchanges) {
+                        if (props.getOrDefault(PROP_EXCHANGE, "").equals(exchange.getName())) {
+                            // indicate this message is from the destination exchange
+                            // don't need to route, avoid dead loop
+                            continue;
+                        }
+                        props.put(PROP_EXCHANGE, exchange.getName());
+                        CompletableFuture<Void> routeFuture = exchange.getRouter(exchangeName).routingMessageToEx(
+                                entry,
+                                props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                props
+                        );
                         routeFutureList.add(routeFuture);
                     }
                     return FutureUtil.waitForAll(routeFutureList);
@@ -209,6 +235,77 @@ public class PersistentExchange extends AbstractAmqpExchange {
     }
 
     @Override
+    public CompletableFuture<Void> bindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+        routerMap.compute(sourceEx.getName(), (k, router) -> {
+            if (router == null) {
+                router = AbstractAmqpMessageRouter.generateRouter(sourceEx.getType());
+            }
+            AmqpBinding binding = new AmqpBinding(sourceEx.getName(), routingKey, params);
+            router.addBinding(binding);
+            router.setExchange(sourceEx);
+            router.setDestinationExchange(this);
+            return router;
+        });
+        updateExchangeProperties();
+        return sourceEx.addExchange(this, routingKey, params);
+    }
+
+    @Override
+    public void unbindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+        routerMap.computeIfPresent(sourceEx.getName(), (k, router) -> {
+            router.getBindings().remove(new AmqpBinding(sourceEx.getName(), routingKey, params));
+            return router;
+        });
+        updateExchangeProperties();
+        sourceEx.removeExchange(this, routingKey, params);
+    }
+
+    @Override
+    public CompletableFuture<Void> addExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params) {
+        exchanges.add(destinationEx);
+        if (exchangeType == ExchangeType.DIRECT) {
+            bindingKeyExchangeMap.compute(routingKey, (k, v) -> {
+                if (v == null) {
+                    v = Sets.newConcurrentHashSet();
+                }
+                v.add(destinationEx);
+                return v;
+            });
+        }
+        createCursorIfNotExists(getExBindCursorName(destinationEx));
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void removeExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params) {
+        if (exchangeType == ExchangeType.DIRECT) {
+            bindingKeyExchangeMap.computeIfPresent(routingKey, (k, v) -> {
+                v.remove(destinationEx);
+                return v;
+            });
+        }
+        if (routerMap.get(destinationEx.getName()) == null
+                || routerMap.get(destinationEx.getName()).getBindings().isEmpty()) {
+            exchanges.remove(destinationEx);
+            deleteCursor(getExBindCursorName(destinationEx));
+        }
+    }
+
+    private String getExBindCursorName(AmqpExchange exchange) {
+        return "__des_ex_" + exchange.getName();
+    }
+
+    @Override
+    public int getExchangeSize() {
+        return exchanges.size();
+    }
+
+    @Override
+    public AmqpMessageRouter getRouter(String sourceEx) {
+        return routerMap.get(sourceEx);
+    }
+
+    @Override
     public Topic getTopic(){
         return persistentTopic;
     }
@@ -222,6 +319,8 @@ public class PersistentExchange extends AbstractAmqpExchange {
             if (queueNames.size() != 0) {
                 properties.put(QUEUES, jsonMapper.writeValueAsString(getQueueNames()));
             }
+            properties.put(DES_EXCHANGES, jsonMapper.writeValueAsString(getExchangeNames()));
+            properties.put(BINDINGS, jsonMapper.writeValueAsString(getBindingsData()));
         } catch (JsonProcessingException e) {
             log.error("[{}] covert map of routers to String error: {}", exchangeName, e.getMessage());
             return;
@@ -235,6 +334,43 @@ public class PersistentExchange extends AbstractAmqpExchange {
             queueNames.add(queue.getName());
         }
         return queueNames;
+    }
+
+    private List<String> getExchangeNames() {
+        return exchanges.stream().map(AmqpExchange::getName).collect(Collectors.toList());
+    }
+
+    private List<AmqpExchangeProperties> getBindingsData() {
+        List<AmqpExchangeProperties> propertiesList = new ArrayList<>(routerMap.size());
+        for (AmqpMessageRouter router : routerMap.values()) {
+            AmqpExchangeProperties properties = new AmqpExchangeProperties();
+            properties.setExchangeName(router.getExchange().getName());
+            properties.setType(router.getExchange().getType());
+            properties.setBindings(router.getBindings());
+            propertiesList.add(properties);
+        }
+        return propertiesList;
+    }
+
+    public void recover(Map<String, String> properties, ExchangeContainer exchangeContainer,
+                         NamespaceName namespaceName) throws JsonProcessingException {
+        if (null == properties || properties.isEmpty() || !properties.containsKey(BINDINGS)) {
+            return;
+        }
+        List<AmqpExchangeProperties> amqpExchangeProperties = jsonMapper.readValue(properties.get(BINDINGS),
+                new TypeReference<List<AmqpExchangeProperties>>() {});
+        if (amqpExchangeProperties == null) {
+            return;
+        }
+        for (AmqpExchangeProperties props : amqpExchangeProperties) {
+            exchangeContainer.asyncGetExchange(namespaceName, props.getExchangeName(), false, null)
+                    .thenAccept(ex -> {
+                        AmqpMessageRouter messageRouter = AbstractAmqpMessageRouter.generateRouter(props.getType());
+                        messageRouter.setExchange(ex);
+                        messageRouter.setDestinationExchange(this);
+                        messageRouter.setBindings(props.getBindings());
+                    });
+        }
     }
 
     private ManagedCursor createCursorIfNotExists(String name) {

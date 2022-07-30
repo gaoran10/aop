@@ -13,15 +13,25 @@
  */
 package io.streamnative.pulsar.handlers.amqp;
 
+import com.google.common.collect.Sets;
+import io.netty.buffer.ByteBuf;
 import io.streamnative.pulsar.handlers.amqp.impl.DirectMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.FanoutMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.HeadersMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.impl.TopicMessageRouter;
-import java.util.HashSet;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+
+import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.mledger.AsyncCallbacks;
+import org.apache.bookkeeper.mledger.Entry;
+import org.apache.bookkeeper.mledger.ManagedLedgerException;
+import org.apache.bookkeeper.mledger.Position;
+import org.apache.pulsar.broker.service.persistent.PersistentTopic;
+import org.apache.pulsar.common.util.FutureUtil;
 
 /**
  * Base class for AMQP message router.
@@ -30,14 +40,16 @@ import lombok.extern.slf4j.Slf4j;
 public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
 
     protected AmqpExchange exchange;
+    protected AmqpExchange destinationEx;
     protected AmqpQueue queue;
     protected final AmqpMessageRouter.Type routerType;
     protected Set<String> bindingKeys;
+    protected Set<AmqpBinding> bindings = Sets.newConcurrentHashSet();
     protected Map<String, Object> arguments;
 
     protected AbstractAmqpMessageRouter(Type routerType) {
         this.routerType = routerType;
-        this.bindingKeys = new HashSet<>();
+        this.bindingKeys = Sets.newConcurrentHashSet();
     }
 
     @Override
@@ -53,6 +65,16 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public AmqpExchange getExchange() {
         return exchange;
+    }
+
+    @Override
+    public void setDestinationExchange(AmqpExchange exchange) {
+        this.destinationEx = exchange;
+    }
+
+    @Override
+    public AmqpExchange getDestinationExchange() {
+        return destinationEx;
     }
 
     @Override
@@ -81,6 +103,21 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     }
 
     @Override
+    public void addBinding(AmqpBinding binding) {
+        this.bindings.add(binding);
+    }
+
+    @Override
+    public void setBindings(Set<AmqpBinding> bindings) {
+        this.bindings = bindings;
+    }
+
+    @Override
+    public Set<AmqpBinding> getBindings() {
+        return bindings;
+    }
+
+    @Override
     public void setArguments(Map<String, Object> arguments) {
         this.arguments = arguments;
     }
@@ -90,20 +127,20 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
         return arguments;
     }
 
-    public static AmqpMessageRouter generateRouter(AmqpExchange.Type type) {
+    public static AmqpMessageRouter generateRouter(ExchangeType type) {
 
         if (type == null) {
             return null;
         }
 
         switch (type) {
-            case Direct:
+            case DIRECT:
                 return new DirectMessageRouter();
-            case Fanout:
+            case FANOUT:
                 return new FanoutMessageRouter();
-            case Topic:
+            case TOPIC:
                 return new TopicMessageRouter();
-            case Headers:
+            case HEADERS:
                 return new HeadersMessageRouter();
             default:
                 return null;
@@ -113,16 +150,45 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public CompletableFuture<Void> routingMessage(long ledgerId, long entryId,
                                                   String routingKey, Map<String, Object> properties) {
-        CompletableFuture<Void> completableFuture = CompletableFuture.completedFuture(null);
         if (isMatch(properties)) {
             try {
                 return queue.writeIndexMessageAsync(exchange.getName(), ledgerId, entryId, properties);
             } catch (Exception e) {
                 log.error("Failed to route message.", e);
-                completableFuture.completeExceptionally(e);
+                return FutureUtil.failedFuture(e);
             }
         }
-        return completableFuture;
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public CompletableFuture<Void> routingMessageToEx(Entry entry, String routingKey, Map<String, Object> properties) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        if (isMatch(properties)) {
+            return destinationEx.writeMessageAsync(MessageConvertUtils.entryToMessage(entry, properties), routingKey)
+                    .thenApply(__ -> null);
+//            try {
+//                ((PersistentTopic) destinationEx.getTopic()).getManagedLedger().asyncAddEntry(entry.getDataBuffer(), new AsyncCallbacks.AddEntryCallback() {
+//                    @Override
+//                    public void addComplete(Position position, ByteBuf entryData, Object ctx) {
+//                        future.complete(null);
+//                    }
+//
+//                    @Override
+//                    public void addFailed(ManagedLedgerException exception, Object ctx) {
+//                        log.error("Failed to write message to destination exchange {}",
+//                                destinationEx.getName(), exception);
+//                        future.completeExceptionally(exception);
+//                    }
+//                }, null);
+//            } catch (Exception e) {
+//                log.error("Failed to route message to exchange.", e);
+//                return FutureUtil.failedFuture(e);
+//            }
+        } else {
+            future.complete(null);
+        }
+        return future;
     }
 
     public abstract boolean isMatch(Map<String, Object> properties);

@@ -36,7 +36,7 @@ import org.testng.annotations.Test;
  */
 public class AdminTest extends AmqpTestBase{
 
-    @Test(timeOut = 1000 * 5)
+    @Test()
     public void listExchangeTest() throws Exception {
         Connection connection = getConnection("vhost1", true);
         Channel channel = connection.createChannel();
@@ -48,6 +48,13 @@ public class AdminTest extends AmqpTestBase{
         }
         String ex1 = vhost1Exs.iterator().next();
 
+        Map<String, Object> map = new HashMap<>();
+        map.put("e2e_a", "av");
+        map.put("e2e_b", "bv");
+        channel.exchangeBind("destination", "source", "e2e-key", map);
+        admin.topics().createNonPartitionedTopic("persistent://public/vhost1/__amqp_exchange__xx");
+
+        Thread.sleep(1000 * 60 * 60);
         Connection connection2 = getConnection("vhost2", true);
         Channel channel2 = connection2.createChannel();
         Set<String> vhost2Exs = new HashSet<>();

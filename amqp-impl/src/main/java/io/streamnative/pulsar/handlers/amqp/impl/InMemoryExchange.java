@@ -14,10 +14,13 @@
 package io.streamnative.pulsar.handlers.amqp.impl;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import io.netty.buffer.ByteBuf;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpExchange;
 import io.streamnative.pulsar.handlers.amqp.AmqpExchange;
+import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueue;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -44,8 +47,9 @@ public class InMemoryExchange extends AbstractAmqpExchange {
     private final long currentLedgerId;
     private long currentEntryId;
 
-    public InMemoryExchange(String exchangeName, AmqpExchange.Type exchangeType, boolean autoDelete) {
-        super(exchangeName, exchangeType, new HashSet<>(), false, autoDelete);
+    public InMemoryExchange(String exchangeName, ExchangeType exchangeType, boolean autoDelete) {
+        super(exchangeName, exchangeType, Sets.newConcurrentHashSet(), Sets.newConcurrentHashSet(),
+                false, autoDelete);
         this.currentLedgerId = 1L;
     }
 
@@ -145,6 +149,36 @@ public class InMemoryExchange extends AbstractAmqpExchange {
 
     @Override
     public Topic getTopic() {
+        return null;
+    }
+
+    @Override
+    public CompletableFuture<Void> bindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+        return null;
+    }
+
+    @Override
+    public void unbindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+
+    }
+
+    @Override
+    public CompletableFuture<Void> addExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params) {
+        return null;
+    }
+
+    @Override
+    public void removeExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params) {
+
+    }
+
+    @Override
+    public int getExchangeSize() {
+        return 0;
+    }
+
+    @Override
+    public AmqpMessageRouter getRouter(String sourceEx) {
         return null;
     }
 

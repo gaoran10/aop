@@ -20,12 +20,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpQueue;
+import io.streamnative.pulsar.handlers.amqp.AmqpBinding;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
 import io.streamnative.pulsar.handlers.amqp.AmqpExchange;
 import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueueProperties;
 import io.streamnative.pulsar.handlers.amqp.ExchangeContainer;
 import io.streamnative.pulsar.handlers.amqp.IndexMessage;
+import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
 import java.util.ArrayList;
@@ -34,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.Entry;
@@ -134,7 +138,7 @@ public class PersistentQueue extends AbstractAmqpQueue {
                     exchangeContainer.asyncGetExchange(namespaceName, exchangeName, false, null);
             amqpExchangeCompletableFuture.whenComplete((amqpExchange, throwable) -> {
                 AmqpMessageRouter messageRouter = AbstractAmqpMessageRouter.
-                        generateRouter(AmqpExchange.Type.value(amqpQueueProperty.getType().toString()));
+                        generateRouter(ExchangeType.value(amqpQueueProperty.getType().toString()));
                 messageRouter.setQueue(this);
                 messageRouter.setExchange(amqpExchange);
                 messageRouter.setArguments(arguments);
