@@ -29,6 +29,7 @@ public class E2ETest extends AmqpTestBase{
 
     @Test()
     public void listExchangeTest() throws Exception {
+        Thread.sleep(1000 * 60 * 60);
         Connection connection = getConnection("vhost1", true);
         Channel channel = connection.createChannel();
         String ex1, ex2, qu1, qu2, qu3;
