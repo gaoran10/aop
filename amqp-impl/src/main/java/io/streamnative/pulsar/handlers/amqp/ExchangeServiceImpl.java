@@ -172,7 +172,7 @@ public class ExchangeServiceImpl implements ExchangeService {
         CompletableFuture<Void> future = new CompletableFuture<>();
         exchangeContainer.asyncGetExchange(namespaceName, source, false, null)
                 .thenCombine(exchangeContainer.asyncGetExchange(namespaceName, destination, false, null),
-                        (sourceEx, desEx) -> desEx.bindExchange(sourceEx, bindingKey, params))
+                        (sourceEx, desEx) -> desEx.bindExchange(sourceEx, getFinalKey(bindingKey, destination), params))
                 .thenAccept(__ -> {
                     future.complete(null);
                 })
@@ -189,7 +189,7 @@ public class ExchangeServiceImpl implements ExchangeService {
         CompletableFuture<Void> future = new CompletableFuture<>();
         exchangeContainer.asyncGetExchange(namespaceName, source, false, null)
                 .thenCombine(exchangeContainer.asyncGetExchange(namespaceName, destination, false, null),
-                        (sourceEx, desEx) -> desEx.unbindExchange(sourceEx, bindingKey, params))
+                        (sourceEx, desEx) -> desEx.unbindExchange(sourceEx, getFinalKey(bindingKey, destination), params))
                 .thenAccept(__ -> {
                     future.complete(null);
                 })
@@ -199,4 +199,15 @@ public class ExchangeServiceImpl implements ExchangeService {
                 });
         return future;
     }
+
+    private String getFinalKey(String bindingKey, String destination) {
+        String finalKey;
+        if (bindingKey == null) {
+            finalKey = destination;
+        } else {
+            finalKey = bindingKey;
+        }
+        return finalKey;
+    }
+
 }
