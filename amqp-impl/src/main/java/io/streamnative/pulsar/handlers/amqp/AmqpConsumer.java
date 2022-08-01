@@ -119,8 +119,6 @@ public class AmqpConsumer extends Consumer {
             channel.getCreditManager().useCreditForMessages(totalMessages, 0);
             if (!channel.getCreditManager().hasCredit()) {
                 channel.setBlockedOnCredit();
-                log.info("[{}] channel block on credit for {} {}-{}",
-                        channel.getChannelId(), totalMessages, getSubscription().getTopic().getName(), queueName);
             }
         }
         MESSAGE_PERMITS_UPDATER.addAndGet(this, -totalMessages);
