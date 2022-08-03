@@ -175,7 +175,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     type, passive, durable, autoDelete, internal, nowait, arguments);
         }
 
-        this.exchangeService.exchangeDeclare(connection.getNamespaceName(), exchange.toString(), type.toString(),
+        this.exchangeService.exchangeDeclare(connection.getNamespaceName(), exchange.toString(),
+                type == null ? null : type.toString(),
                 passive, durable, autoDelete, internal, arguments).thenAccept(__ -> {
             if (!nowait) {
                 connection.writeAndFlushFrame(

@@ -69,6 +69,7 @@ public class ExchangeServiceImpl implements ExchangeService {
         exchangeContainer.asyncGetExchange(namespaceName, formatExchangeName(exchange), createIfMissing, exchangeType)
                 .whenComplete((ex, throwable) -> {
                     if (throwable != null) {
+                        log.error("Failed to get exchange {} in vhost {}", exchange, namespaceName, throwable);
                         future.completeExceptionally(new AoPException(ErrorCodes.NOT_FOUND,
                                 "Failed to get " + exchange + " in vhost " + namespaceName, false, true));
                         return;
@@ -78,7 +79,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                                 "Get empty exchange " + exchange + " in vhost " + namespaceName, true, false));
                         return;
                     }
-                    if (!ex.getType().toString().equalsIgnoreCase(exchangeType.replace("-", "_"))) {
+                    if (!passive && !ex.getType().getValue().equalsIgnoreCase(exchangeType)) {
                         future.completeExceptionally(new AoPException(ErrorCodes.NOT_ALLOWED,
                                 "Attempt to redeclare exchange: '" + exchange + "' of type " + ex.getType()
                                         + " to " + exchangeType + ".", false, true));

@@ -384,7 +384,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
         Map<String, String> properties = new HashMap<>();
         try {
             properties.put(EXCHANGE, exchangeName);
-            properties.put(TYPE, exchangeType.toString());
+            properties.put(TYPE, exchangeType.getValue());
             List<String> queueNames = getQueueNames();
             if (queueNames.size() != 0) {
                 properties.put(QUEUES, jsonMapper.writeValueAsString(getQueueNames()));
