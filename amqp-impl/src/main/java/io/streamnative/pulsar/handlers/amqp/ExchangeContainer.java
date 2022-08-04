@@ -48,20 +48,28 @@ public class ExchangeContainer {
     @Getter
     private Map<NamespaceName, Map<String, CompletableFuture<AmqpExchange>>> exchangeMap = new ConcurrentHashMap<>();
 
-    /**
-     * Get or create exchange.
-     *
-     * @param namespaceName   namespace used in pulsar
-     * @param exchangeName    name of exchange
-     * @param createIfMissing true to create the exchange if not existed, and exchangeType should be not null
-     *                        false to get the exchange and return null if not existed
-     * @param exchangeType    type of exchange: direct,fanout,topic and headers
-     * @return the completableFuture of get result
-     */
     public CompletableFuture<AmqpExchange> asyncGetExchange(NamespaceName namespaceName,
                                                             String exchangeName,
                                                             boolean createIfMissing,
                                                             String exchangeType) {
+        return asyncGetExchange(namespaceName, exchangeName, createIfMissing, exchangeType, false);
+    }
+
+        /**
+         * Get or create exchange.
+         *
+         * @param namespaceName   namespace used in pulsar
+         * @param exchangeName    name of exchange
+         * @param createIfMissing true to create the exchange if not existed, and exchangeType should be not null
+         *                        false to get the exchange and return null if not existed
+         * @param exchangeType    type of exchange: direct,fanout,topic and headers
+         * @return the completableFuture of get result
+         */
+    public CompletableFuture<AmqpExchange> asyncGetExchange(NamespaceName namespaceName,
+                                                            String exchangeName,
+                                                            boolean createIfMissing,
+                                                            String exchangeType,
+                                                            boolean autoDelete) {
         CompletableFuture<AmqpExchange> amqpExchangeCompletableFuture = new CompletableFuture<>();
         if (StringUtils.isEmpty(exchangeType) && createIfMissing) {
             log.error("[{}][{}] ExchangeType should be set when createIfMissing is true.", namespaceName, exchangeName);
@@ -117,7 +125,7 @@ public class ExchangeContainer {
                             removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
                         }
                         PersistentExchange amqpExchange = new PersistentExchange(exchangeName,
-                                amqpExchangeType, persistentTopic, false,
+                                amqpExchangeType, persistentTopic, autoDelete,
                                 amqpStats.addExchangeMetrics(namespaceName.getLocalName(), exchangeName));
                         try {
                             amqpExchange.recover(properties, this, namespaceName);

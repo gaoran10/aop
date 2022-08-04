@@ -73,7 +73,6 @@ import org.apache.qpid.server.protocol.v0_8.transport.MessagePublishInfo;
 import org.apache.qpid.server.protocol.v0_8.transport.MethodRegistry;
 import org.apache.qpid.server.protocol.v0_8.transport.QueueDeclareOkBody;
 import org.apache.qpid.server.protocol.v0_8.transport.QueueDeleteOkBody;
-import org.apache.qpid.server.protocol.v0_8.transport.ServerChannelMethodProcessor;
 import org.apache.qpid.server.protocol.v0_8.transport.TxCommitOkBody;
 import org.apache.qpid.server.protocol.v0_8.transport.TxRollbackOkBody;
 import org.apache.qpid.server.protocol.v0_8.transport.TxSelectOkBody;
@@ -100,7 +99,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
     private final UnacknowledgedMessageMap unacknowledgedMessageMap;
 
     /** Maps from consumer tag to consumers instance. */
-    private final Map<String, Consumer> tag2ConsumersMap = new ConcurrentHashMap<>();
+    private final Map<String, AmqpConsumer> tag2ConsumersMap = new ConcurrentHashMap<>();
 
     private final Map<String, AmqpConsumer> fetchConsumerMap = new ConcurrentHashMap<>();
 
@@ -111,7 +110,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
      */
     private IncomingMessage currentMessage;
 
-    private final String defaultSubscription = "defaultSubscription";
+    public static final String defaultSubscription = "defaultSubscription";
     public static final AMQShortString EMPTY_STRING = AMQShortString.createAMQShortString((String) null);
     /**
      * ConsumerTag prefix, the tag is unique per subscription to a queue.
@@ -348,7 +347,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     exchange, bindingKey, arguments);
         }
         queueService.queueUnbind(connection.getNamespaceName(), queue.toString(), exchange.toString(),
-                bindingKey.toString(), arguments, connection.getConnectionId()).thenAccept(__ -> {
+                bindingKey != null ? bindingKey.toString() : null, arguments, connection.getConnectionId())
+                .thenAccept(__ -> {
             AMQMethodBody responseBody = connection.getMethodRegistry().createQueueUnbindOkBody();
             connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
@@ -441,7 +441,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                         CommandSubscribe.SubType.Shared, topic.getName(), CONSUMER_ID.incrementAndGet(), 0,
                         consumerTag, true, connection.getServerCnx(), "", null,
                         false, CommandSubscribe.InitialPosition.Latest,
-                        null, this, consumerTag, queueName, ack);
+                        null, this, consumerTag, queueName, ack, queueService);
             } catch (BrokerServiceException e) {
                 exceptionFuture.completeExceptionally(e);
                 return;
@@ -560,7 +560,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                                     topic.getName(), 0, 0, "", true,
                                     connection.getServerCnx(), "", null, false,
                                     CommandSubscribe.InitialPosition.Latest, null, this,
-                                    "", queueName, noAck);
+                                    "", queueName, noAck, queueService);
                             subscription.addConsumer(consumer);
                             consumer.handleFlow(DEFAULT_CONSUMER_PERMIT);
                             return consumer;
@@ -909,9 +909,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
         // TODO
     }
 
-    public void close() {
+    public void close(boolean closeConnection) {
         // TODO
-        unsubscribeConsumerAll();
+        unsubscribeConsumerAll(closeConnection);
         // TODO need to delete exclusive queues in this channel.
         setDefaultQueue(null);
     }
@@ -957,10 +957,10 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             log.debug("Unsubscribing consumer '{}' on channel {}", consumerTag, this);
         }
 
-        Consumer consumer = tag2ConsumersMap.remove(consumerTag);
+        AmqpConsumer consumer = tag2ConsumersMap.remove(consumerTag);
         if (consumer != null) {
             try {
-                consumer.close();
+                consumer.closeAmqpConsumer(false);
                 return true;
             } catch (BrokerServiceException e) {
                 log.error(e.getMessage());
@@ -972,7 +972,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
         return false;
     }
 
-    private void unsubscribeConsumerAll() {
+    private void unsubscribeConsumerAll(boolean closeConnection) {
         if (log.isDebugEnabled()) {
             if (!tag2ConsumersMap.isEmpty()) {
                 log.debug("Unsubscribing all consumers on channel  {}", channelId);
@@ -983,7 +983,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
         try {
             tag2ConsumersMap.forEach((key, value) -> {
                 try {
-                    value.close();
+                    value.closeAmqpConsumer(closeConnection);
                 } catch (BrokerServiceException e) {
                     log.error(e.getMessage());
                 }
@@ -992,7 +992,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             tag2ConsumersMap.clear();
             fetchConsumerMap.forEach((key, value) -> {
                 try {
-                    value.close();
+                    value.closeAmqpConsumer(closeConnection);
                 } catch (BrokerServiceException e) {
                     log.error(e.getMessage());
                 }
@@ -1014,7 +1014,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
     }
 
     @VisibleForTesting
-    public Map<String, Consumer> getTag2ConsumersMap() {
+    public Map<String, AmqpConsumer> getTag2ConsumersMap() {
         return tag2ConsumersMap;
     }
 

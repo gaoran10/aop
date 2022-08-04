@@ -33,10 +33,10 @@ public class AmqpPullConsumer extends AmqpConsumer {
         Map<String, String> metadata, boolean readCompacted,
         CommandSubscribe.InitialPosition subscriptionInitialPosition,
         KeySharedMeta keySharedMeta, AmqpChannel channel, String consumerTag, String queueName,
-        boolean autoAck) throws BrokerServiceException {
+        boolean autoAck, QueueService queueService) throws BrokerServiceException {
         super(queueContainer, subscription, subType, topicName, consumerId, priorityLevel, consumerName,
                 isDurable, cnx, appId, metadata, readCompacted, subscriptionInitialPosition, keySharedMeta, channel,
-            consumerTag, queueName, autoAck);
+            consumerTag, queueName, autoAck, queueService);
     }
 
     @Override

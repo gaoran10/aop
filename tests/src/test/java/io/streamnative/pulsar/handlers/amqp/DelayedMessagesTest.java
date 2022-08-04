@@ -20,7 +20,6 @@ import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Awaitility;
-import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
@@ -28,9 +27,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -89,53 +85,9 @@ public class DelayedMessagesTest extends AmqpTestBase{
                 .until(messageSet::isEmpty);
         System.out.println("receive all messages in " + (System.currentTimeMillis() - st2) / 1000 + "s");
 //        Thread.sleep(1000 * 60 * 60);
-    }
 
-    interface ReadCallback {
-        void readFailed(String s);
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        ExecutorService executors = Executors.newSingleThreadExecutor();
-
-        ReadCallback readCallback = new ReadCallback() {
-            @Override
-            public void readFailed(String s) {
-                log.info(s.toLowerCase());
-            }
-        };
-
-        DelayedMessagesTest test = new DelayedMessagesTest();
-        executors.submit(() -> {
-            test.read(executors, readCallback);
-        });
-        System.out.println("test finish");
-        Thread.sleep(1000 * 2);
-        System.out.println("test finish 2");
-        executors.shutdown();
-    }
-
-    public void read(ExecutorService executorService, ReadCallback readCallback) {
-        try {
-            log.info("read method");
-            read0(executorService, readCallback);
-        } catch (Throwable e) {
-            log.error("read 0 error ", e);
-        }
-    }
-
-    public void read0(ExecutorService executorService, ReadCallback readCallback) {
-        process().thenAcceptAsync(s -> {
-            log.info("process finish");
-            readCallback.readFailed(s);
-        }, executorService).exceptionally(s -> {
-            log.error("failed to process", s);
-            return null;
-        });
-    }
-
-    public CompletableFuture<String> process() {
-        return CompletableFuture.completedFuture(null);
+        channel.close();
+        connection.close();
     }
 
 }

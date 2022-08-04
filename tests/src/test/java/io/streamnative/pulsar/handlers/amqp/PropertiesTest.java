@@ -63,7 +63,8 @@ public class PropertiesTest extends AmqpTestBase{
         props.headers(headers);
         channel.basicPublish(ex, "", props.build(), "test".getBytes());
 
-        Thread.sleep(1000 * 60 * 60);
+        connection.close();
+//        Thread.sleep(1000 * 60 * 60);
     }
 
     interface ReadCallback {

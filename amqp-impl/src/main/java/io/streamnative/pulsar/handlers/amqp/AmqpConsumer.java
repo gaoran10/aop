@@ -76,13 +76,15 @@ public class AmqpConsumer extends Consumer {
 
     private final int maxPermits = 1000;
 
+    private QueueService queueService;
+
     public AmqpConsumer(QueueContainer queueContainer, Subscription subscription,
         CommandSubscribe.SubType subType, String topicName, long consumerId,
         int priorityLevel, String consumerName, boolean isDurable, ServerCnx cnx,
         String appId, Map<String, String> metadata, boolean readCompacted,
         CommandSubscribe.InitialPosition subscriptionInitialPosition,
         KeySharedMeta keySharedMeta, AmqpChannel channel, String consumerTag, String queueName,
-        boolean autoAck) throws BrokerServiceException {
+        boolean autoAck, QueueService queueService) throws BrokerServiceException {
         super(subscription, subType, topicName, consumerId, priorityLevel, consumerName, isDurable,
             cnx, appId, metadata, readCompacted, subscriptionInitialPosition, keySharedMeta, null,
                 Commands.DEFAULT_CONSUMER_EPOCH);
@@ -92,6 +94,7 @@ public class AmqpConsumer extends Consumer {
         this.consumerTag = consumerTag;
         this.queueName = queueName;
         this.unAckMessages = new ConcurrentHashMap<>();
+        this.queueService = queueService;
     }
 
     @Override
@@ -289,6 +292,34 @@ public class AmqpConsumer extends Consumer {
             this.getSubscription().consumerFlow(this, var);
             ADD_PERMITS_UPDATER.set(this, 0);
         }
+    }
+
+    public void closeAmqpConsumer(boolean closeConnection) throws BrokerServiceException {
+        super.close();
+        asyncGetQueue().thenAccept(amqpQueue -> {
+            if (amqpQueue.isAutoDelete()) {
+                Subscription subscription = amqpQueue.getTopic().getSubscription(AmqpChannel.defaultSubscription);
+                if (subscription != null && subscription.getConsumers().size() == 0) {
+                    deleteQueue("auto-delete");
+                }
+            } else if (amqpQueue.isExclusive() && closeConnection) {
+                deleteQueue("exclusive");
+            }
+        }).exceptionally(t -> {
+            log.error("Failed to get amqp queue {} when check auto-delete.", queueName, t);
+            return null;
+        });
+    }
+
+    private void deleteQueue(String reason) {
+        queueService.queueDelete(channel.getConnection().getNamespaceName(), queueName,
+                false, false, channel.getConnection().getConnectionId()).thenAccept(__ -> {
+            log.info("Success to delete queue topic {} due to {}.", reason, queueName);
+            queueContainer.deleteQueue(channel.getConnection().getNamespaceName(), queueName);
+        }).exceptionally(t -> {
+            log.error("Failed to delete queue topic {} when check {}.", reason, queueName, t);
+            return null;
+        });
     }
 
 }

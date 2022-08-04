@@ -66,8 +66,8 @@ public class ExchangeServiceImpl implements ExchangeService {
             }
         }
         CompletableFuture<AmqpExchange> future = new CompletableFuture<>();
-        exchangeContainer.asyncGetExchange(namespaceName, formatExchangeName(exchange), createIfMissing, exchangeType)
-                .whenComplete((ex, throwable) -> {
+        exchangeContainer.asyncGetExchange(namespaceName, formatExchangeName(exchange), createIfMissing, exchangeType,
+                        autoDelete).whenComplete((ex, throwable) -> {
                     if (throwable != null) {
                         log.error("Failed to get exchange {} in vhost {}", exchange, namespaceName, throwable);
                         future.completeExceptionally(new AoPException(ErrorCodes.NOT_FOUND,
@@ -76,7 +76,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                     }
                     if (ex == null) {
                         future.completeExceptionally(new AoPException(ErrorCodes.NOT_FOUND,
-                                "Get empty exchange " + exchange + " in vhost " + namespaceName, true, false));
+                                "No such exchange " + exchange + " in vhost " + namespaceName, true, false));
                         return;
                     }
                     if (!passive && !ex.getType().getValue().equalsIgnoreCase(exchangeType)) {

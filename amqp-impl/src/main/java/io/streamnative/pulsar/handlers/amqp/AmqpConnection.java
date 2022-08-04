@@ -725,7 +725,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
     void closeChannel(AmqpChannel channel, boolean mark) {
         int channelId = channel.getChannelId();
         try {
-            channel.close();
+            channel.close(false);
             if (mark) {
                 markChannelAwaitingCloseOk(channelId);
             }
@@ -739,7 +739,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         try {
             for (AmqpChannel channel : channels.values()) {
                 try {
-                    channel.close();
+                    channel.close(true);
                 } catch (RuntimeException exceptionForThisChannel) {
                     if (exception == null) {
                         exception = exceptionForThisChannel;

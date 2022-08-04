@@ -20,14 +20,19 @@ import static io.streamnative.pulsar.handlers.amqp.utils.ExchangeUtil.isBuildInE
 import static io.streamnative.pulsar.handlers.amqp.utils.ExchangeUtil.isDefaultExchange;
 
 import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
+
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.pulsar.broker.service.Subscription;
 import org.apache.pulsar.common.naming.NamespaceName;
+import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.qpid.server.protocol.ErrorCodes;
 import org.apache.qpid.server.protocol.v0_8.AMQShortString;
@@ -58,7 +63,7 @@ public class QueueServiceImpl implements QueueService {
             finalQueue = AMQShortString.createAMQShortString(queue);
         }
         CompletableFuture<AmqpQueue> future = new CompletableFuture<>();
-        getQueue(namespaceName, finalQueue.toString(), !passive, connectionId)
+        getQueue(namespaceName, finalQueue.toString(), !passive, autoDelete, exclusive, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
                 log.error("Failed to get topic from queue container", throwable);
@@ -96,17 +101,33 @@ public class QueueServiceImpl implements QueueService {
                             new AoPException(ErrorCodes.NOT_FOUND, "No such queue: " + queue, true, false));
                 } else {
                     Collection<AmqpMessageRouter> routers = amqpQueue.getRouters();
+                    if (ifUnused && !CollectionUtils.isEmpty(routers)) {
+                        future.completeExceptionally(
+                                new AoPException(ErrorCodes.IN_USE, "The queue " + queue + " is used", true, false));
+                        return;
+                    }
+                    Subscription subscription = amqpQueue.getTopic().getSubscription(AmqpChannel.defaultSubscription);
+                    if (ifEmpty && subscription != null
+                            && subscription.getNumberOfEntriesInBacklog(false) > 0) {
+                        future.completeExceptionally(new AoPException(
+                                ErrorCodes.IN_USE, "The queue " + queue + " is not empty", true, false));
+                        return;
+                    }
                     if (!CollectionUtils.isEmpty(routers)) {
                         for (AmqpMessageRouter router : routers) {
                             // TODO need to change to async way
                             amqpQueue.unbindExchange(router.getExchange());
                         }
                     }
-                    amqpQueue.getTopic().delete().thenAccept(__ -> {
+                    amqpQueue.getTopic().deleteForcefully().thenAccept(__ -> {
                         queueContainer.deleteQueue(namespaceName, amqpQueue.getName());
                         future.complete(null);
                     }).exceptionally(t -> {
-                        future.completeExceptionally(t);
+                        log.error("Failed to delete topic for queue {} in vhost {}",
+                                queue, namespaceName.getLocalName(), t);
+                        future.completeExceptionally(new AoPException(
+                                ErrorCodes.INTERNAL_ERROR, "Failed to delete queue " + queue
+                                + " in vhost " + namespaceName.getLocalName(), true, false));
                         return null;
                     });
                 }
@@ -149,7 +170,11 @@ public class QueueServiceImpl implements QueueService {
                             .thenAccept(__ -> {
                         future.complete(null);
                     }).exceptionally(t -> {
-                        future.completeExceptionally(t);
+                        log.error("Failed to bind queue {} to exchange {} with key {} in vhost {}",
+                                queue, exchange, finalBindingKey, namespaceName.getLocalName(), t);
+                        future.completeExceptionally(new AoPException(
+                                ErrorCodes.INTERNAL_ERROR, "Failed to bind queue " + queue
+                                + " in vhost " + namespaceName.getLocalName(), true, false));
                         return null;
                     });
                 }));
@@ -190,10 +215,19 @@ public class QueueServiceImpl implements QueueService {
                             amqpQueue.unbindExchange(amqpExchange);
                             if (amqpExchange.getAutoDelete() && (amqpExchange.getQueueSize() == 0)) {
                                 exchangeContainer.deleteExchange(namespaceName, exchangeName);
-                                amqpExchange.getTopic().delete().get();
+                                amqpExchange.getTopic().deleteForcefully().thenAccept(__ -> {
+                                    future.complete(null);
+                                }).exceptionally(t -> {
+                                    log.error("Failed to delete topic for exchange {}", exchange, t);
+                                    future.completeExceptionally(getAoPException(t,
+                                            "Failed to delete topic for exchange " + exchange, false, false));
+                                    return null;
+                                });
+                            } else {
+                                future.complete(null);
                             }
-                            future.complete(null);
                         } catch (Exception e) {
+                            log.error("Failed to unbind queue {} from exchange {}", queue, exchange, e);
                             future.completeExceptionally(getAoPException(e,
                                     "Unbind failed:" + e.getMessage(), false, true));
                         }
@@ -207,8 +241,53 @@ public class QueueServiceImpl implements QueueService {
     @Override
     public CompletableFuture<Void> queuePurge(NamespaceName namespaceName, String queue, boolean nowait,
                                               long connectionId) {
-        // TODO queue purge process
-        return CompletableFuture.completedFuture(null);
+        if ((queue == null) || (queue.length() == 0)) {
+            return FutureUtil.failedFuture(new AoPException(ErrorCodes.ARGUMENT_INVALID,
+                    "[QueueQurge] The queue name is empty.", true, false));
+        }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        getQueue(namespaceName, queue, false, connectionId)
+                .whenComplete((amqpQueue, throwable) -> {
+                    if (throwable != null) {
+                        log.error("Failed to get topic from queue container", throwable);
+                        future.completeExceptionally(getAoPException(throwable, "Failed to get queue: "
+                                + queue + ", " + throwable.getMessage(), true, false));
+                    } else {
+                        if (null == amqpQueue) {
+                            future.completeExceptionally(
+                                    new AoPException(ErrorCodes.NOT_FOUND, "No such queue: " + queue, true, false));
+                            return;
+                        }
+                        Collection<AmqpMessageRouter> routers = amqpQueue.getRouters();
+                        Collection<CompletableFuture<Void>> clearFutures = new ArrayList<>();
+                        if (!CollectionUtils.isEmpty(routers)) {
+                            for (AmqpMessageRouter router : routers) {
+                                Subscription subscription = router.getExchange().getTopic().getSubscription(queue);
+                                if (subscription != null) {
+                                    clearFutures.add(subscription.clearBacklog());
+                                }
+                            }
+                        }
+
+                        Subscription subscription =
+                                amqpQueue.getTopic().getSubscription(AmqpChannel.defaultSubscription);
+                        if (subscription != null) {
+                            clearFutures.add(subscription.clearBacklog());
+                        }
+
+                        FutureUtil.waitForAll(clearFutures).thenAccept(__ -> {
+                            future.complete(null);
+                        }).exceptionally(t -> {
+                            log.error("Failed to purge queue {} in vhost {}",
+                                    queue, namespaceName.getLocalName(), t);
+                            future.completeExceptionally(new AoPException(
+                                    ErrorCodes.INTERNAL_ERROR, "Failed to purge queue " + queue
+                                    + " in vhost " + namespaceName.getLocalName(), true, false));
+                            return null;
+                        });
+                    }
+                });
+        return future;
     }
 
     private CompletableFuture<Void> bind(NamespaceName namespaceName, String exchange, AmqpQueue amqpQueue,
@@ -256,8 +335,14 @@ public class QueueServiceImpl implements QueueService {
     @Override
     public CompletableFuture<AmqpQueue> getQueue(NamespaceName namespaceName, String queueName, boolean createIfMissing,
                                                  long connectionId) {
+        return getQueue(namespaceName, queueName, createIfMissing, false, false, connectionId);
+    }
+
+    public CompletableFuture<AmqpQueue> getQueue(NamespaceName namespaceName, String queueName, boolean createIfMissing,
+                                                 boolean autoDelete, boolean exclusive, long connectionId) {
         CompletableFuture<AmqpQueue> future = new CompletableFuture<>();
-        queueContainer.asyncGetQueue(namespaceName, queueName, createIfMissing).whenComplete((queue, throwable) -> {
+        queueContainer.asyncGetQueue(namespaceName, queueName, createIfMissing, autoDelete, exclusive, connectionId)
+                .whenComplete((queue, throwable) -> {
             if (throwable != null) {
                 future.completeExceptionally(new AoPException(ErrorCodes.INTERNAL_ERROR, "Failed to get queue "
                         + queueName + " in vhost " + namespaceName.getLocalName(), false, true));

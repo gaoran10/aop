@@ -51,17 +51,23 @@ public class QueueContainer {
     @Getter
     private Map<NamespaceName, Map<String, CompletableFuture<AmqpQueue>>> queueMap = new ConcurrentHashMap<>();
 
-    /**
-     * Get or create queue.
-     *
-     * @param namespaceName namespace in pulsar
-     * @param queueName name of queue
-     * @param createIfMissing true to create the queue if not existed
-     *                        false to get the queue and return null if not existed
-     * @return the completableFuture of get result
-     */
     public CompletableFuture<AmqpQueue> asyncGetQueue(NamespaceName namespaceName, String queueName,
                                                       boolean createIfMissing) {
+        return asyncGetQueue(namespaceName, queueName, createIfMissing, false, false, -1);
+    }
+
+        /**
+         * Get or create queue.
+         *
+         * @param namespaceName namespace in pulsar
+         * @param queueName name of queue
+         * @param createIfMissing true to create the queue if not existed
+         *                        false to get the queue and return null if not existed
+         * @return the completableFuture of get result
+         */
+    public CompletableFuture<AmqpQueue> asyncGetQueue(NamespaceName namespaceName, String queueName,
+                                                      boolean createIfMissing, boolean autoDelete, boolean exclusive,
+                                                      long connectionId) {
         CompletableFuture<AmqpQueue> queueCompletableFuture = new CompletableFuture<>();
         if (namespaceName == null || StringUtils.isEmpty(queueName)) {
             log.error("[{}][{}] Parameter error, namespaceName or queueName is empty.", namespaceName, queueName);
@@ -100,7 +106,7 @@ public class QueueContainer {
 
                         // TODO: reset connectionId, exclusive and autoDelete
                         PersistentQueue amqpQueue = new PersistentQueue(queueName, persistentTopic,
-                                0, false, false,
+                                connectionId, exclusive, autoDelete,
                                 amqpStats.addQueueMetrics(namespaceName.getLocalName(), queueName));
                         try {
                             amqpQueue.recoverRoutersFromQueueProperties(properties, exchangeContainer,
