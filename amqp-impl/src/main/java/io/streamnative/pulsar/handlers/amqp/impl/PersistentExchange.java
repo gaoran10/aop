@@ -376,6 +376,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
     }
 
     @Override
+    public Map<String, AmqpMessageRouter> getRouters() {
+        return routerMap;
+    }
+
+    @Override
     public Topic getTopic(){
         return persistentTopic;
     }

@@ -27,6 +27,9 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
+
+import io.streamnative.pulsar.handlers.amqp.impl.PersistentExchange;
+import io.streamnative.pulsar.handlers.amqp.impl.PersistentQueue;
 import org.apache.pulsar.broker.namespace.NamespaceService;
 import org.apache.pulsar.broker.resources.NamespaceResources;
 import org.apache.pulsar.broker.web.RestException;
@@ -127,6 +130,14 @@ public class BaseResources {
                     });
                     return vhostBeanList;
                 });
+    }
+
+    protected boolean isExchangeTopic(String topic) {
+        return topic.contains(PersistentExchange.TOPIC_PREFIX);
+    }
+
+    protected boolean isQueueTopic(String topic) {
+        return topic.contains(PersistentQueue.TOPIC_PREFIX);
     }
 
 }

@@ -15,7 +15,6 @@ package io.streamnative.pulsar.handlers.amqp.admin;
 
 import io.streamnative.pulsar.handlers.amqp.admin.impl.BindingBase;
 import io.streamnative.pulsar.handlers.amqp.admin.model.BindingParams;
-import io.streamnative.pulsar.handlers.amqp.admin.model.QueueDeclareParams;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -34,8 +33,31 @@ import lombok.extern.slf4j.Slf4j;
 public class Bindings extends BindingBase {
 
     @GET
+    public void getBindingList(@Suspended final AsyncResponse response) {
+        getBindingListAsync()
+                .thenAccept(response::resume)
+                .exceptionally(t -> {
+                    log.error("Failed to get bindings", t);
+                    resumeAsyncResponseExceptionally(response, t);
+                    return null;
+                });
+    }
+
+    @GET
+    @Path("/{vhost}")
+    public void getBindingList(@Suspended final AsyncResponse response, @PathParam("vhost") String vhost) {
+        getBindingListByVhostAsync(vhost)
+                .thenAccept(response::resume)
+                .exceptionally(t -> {
+                    log.error("Failed to get bindings", t);
+                    resumeAsyncResponseExceptionally(response, t);
+                    return null;
+                });
+    }
+
+    @GET
     @Path("/{vhost}/e/{exchange}/q/{queue}")
-    public void getList(@Suspended final AsyncResponse response,
+    public void getQueueBindingList(@Suspended final AsyncResponse response,
                         @PathParam("vhost") String vhost,
                         @PathParam("exchange") String exchange,
                         @PathParam("queue") String queue) {

@@ -17,18 +17,133 @@ import io.streamnative.pulsar.handlers.amqp.AmqpBinding;
 import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.admin.model.BindingBean;
 import io.streamnative.pulsar.handlers.amqp.admin.model.BindingParams;
+import io.streamnative.pulsar.handlers.amqp.impl.PersistentExchange;
+import io.streamnative.pulsar.handlers.amqp.impl.PersistentQueue;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import javax.ws.rs.core.Response;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.web.RestException;
 import org.apache.pulsar.common.naming.NamespaceName;
+import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.qpid.server.protocol.v0_8.FieldTable;
 
 /**
  * BindingBase.
  */
+@Slf4j
 public class BindingBase extends BaseResources {
+
+    protected CompletableFuture<List<BindingBean>> getBindingListAsync() {
+        final List<BindingBean> list = new ArrayList<>();
+        return namespaceResource().listNamespacesAsync(tenant)
+                .thenCompose(nsList -> {
+                    Collection<CompletableFuture<Void>> futureList = new ArrayList<>();
+                    nsList.forEach(ns -> {
+                        futureList.add(
+                                getBindingListByVhostAsync(ns)
+                                        .thenAccept(list::addAll)
+                                        .exceptionally(t -> {
+                                            log.error("Failed get bindings in vhost {}", ns, t);
+                                            return null;
+                                        })
+                        );
+                    });
+                    return FutureUtil.waitForAll(futureList);
+                })
+                .thenApply(__ -> list);
+    }
+
+    protected CompletableFuture<List<BindingBean>> getBindingListByVhostAsync(String vhost) {
+        List<BindingBean> bindingList = new ArrayList<>();
+        return namespaceService().getFullListOfTopics(NamespaceName.get(tenant, vhost))
+                .thenCompose(topicList -> {
+                    Collection<CompletableFuture<Void>> futureList = new ArrayList<>();
+                    for (String topic : topicList) {
+                        if (isExchangeTopic(topic)) {
+                            String exchange = TopicName.get(topic).getLocalName()
+                                    .substring(PersistentExchange.TOPIC_PREFIX.length());
+                            futureList.add(getBindingListForExchange(vhost, exchange)
+                                    .thenAccept(bindingList::addAll)
+                                    .exceptionally(t -> {
+                                        log.error("Failed to get bindings for exchange {} in vhost {}",
+                                                exchange, vhost, t);
+                                        return null;
+                                    }));
+                        } else if (isQueueTopic(topic)) {
+                            String queue = TopicName.get(topic).getLocalName()
+                                    .substring(PersistentQueue.TOPIC_PREFIX.length());
+                            futureList.add(getBindingListForQueue(vhost, queue)
+                                    .thenAccept(bindingList::addAll)
+                                    .exceptionally(t -> {
+                                        log.error("Failed to get bindings for queue {} in vhost {}",
+                                                queue, vhost, t);
+                                        return null;
+                                    }));
+                        }
+                    }
+                    return FutureUtil.waitForAll(futureList);
+                })
+                .thenApply(__ -> bindingList)
+                .exceptionally(t -> {
+                    log.error("Failed to get bindings in vhost {}.", vhost, t);
+                    return bindingList;
+                });
+    }
+
+    protected CompletableFuture<List<BindingBean>> getBindingListForExchange(String vhost, String exchange) {
+        List<BindingBean> beanList = new ArrayList<>();
+        return exchangeContainer().asyncGetExchange(NamespaceName.get(tenant, vhost), exchange, false, null)
+                .thenAccept(amqpExchange -> {
+                    Map<String, AmqpMessageRouter> routerMap = amqpExchange.getRouters();
+                    for (AmqpMessageRouter router : routerMap.values()) {
+                        for (AmqpBinding binding : router.getBindings().values()) {
+                            BindingBean bean = new BindingBean();
+                            bean.setVhost(vhost);
+                            bean.setSource(binding.getSource());
+                            bean.setDestination(exchange);
+                            bean.setRoutingKey(binding.getBindingKey());
+                            bean.setPropertiesKey(binding.getPropsKey());
+                            bean.setDestinationType("exchange");
+                            beanList.add(bean);
+                        }
+                    }
+                })
+                .thenApply(__ -> beanList)
+                .exceptionally(t -> {
+                    log.error("Failed to get bindings for exchange {} in vhost {}.", exchange, vhost, t);
+                    return beanList;
+                });
+    }
+
+    protected CompletableFuture<List<BindingBean>> getBindingListForQueue(String vhost, String queue) {
+        List<BindingBean> beanList = new ArrayList<>();
+        return queueContainer().asyncGetQueue(NamespaceName.get(tenant, vhost), queue, false)
+                .thenAccept(amqpQueue -> {
+                    Collection<AmqpMessageRouter> routers = amqpQueue.getRouters();
+                    for (AmqpMessageRouter router : routers) {
+                        for (String bindingKey : router.getBindingKey()) {
+                            BindingBean bean = new BindingBean();
+                            bean.setVhost(vhost);
+                            bean.setSource(router.getExchange().getName());
+                            bean.setDestination(queue);
+                            bean.setRoutingKey(bindingKey);
+                            bean.setPropertiesKey(bindingKey);
+                            bean.setDestinationType("queue");
+                            beanList.add(bean);
+                        }
+                    }
+                })
+                .thenApply(__ -> beanList)
+                .exceptionally(t -> {
+                    log.error("Failed to get bindings for queue {} in vhost {}.", queue, vhost, t);
+                    return beanList;
+                });
+    }
 
     protected CompletableFuture<BindingBean> getBindingsByPropsKeyAsync(String vhost, String exchange, String queue,
                                                                         String propsKey) {

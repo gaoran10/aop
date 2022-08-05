@@ -54,13 +54,14 @@ public class DelayedMessagesTest extends AmqpTestBase{
 
         long st2 = System.currentTimeMillis();
         for (int i = 0; i < 50000; i++) {
+            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
+            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
+            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
+
             AMQP.BasicProperties.Builder props = new AMQP.BasicProperties.Builder();
             Map<String, Object> headers = new HashMap<>();
             headers.put("x-delay", 1000 * 5);
             props.headers(headers);
-            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
-            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
-            mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
             String msg = "test-" + i;
             messageSet.add(msg);
             channel.basicPublish(ex, "", props.build(), msg.getBytes());

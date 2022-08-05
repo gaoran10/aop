@@ -150,4 +150,6 @@ public interface AmqpExchange {
 
     AmqpMessageRouter getRouter(String sourceEx);
 
+    Map<String, AmqpMessageRouter> getRouters();
+
 }

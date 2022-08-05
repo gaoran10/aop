@@ -314,10 +314,10 @@ public class AmqpConsumer extends Consumer {
     private void deleteQueue(String reason) {
         queueService.queueDelete(channel.getConnection().getNamespaceName(), queueName,
                 false, false, channel.getConnection().getConnectionId()).thenAccept(__ -> {
-            log.info("Success to delete queue topic {} due to {}.", reason, queueName);
+            log.info("Success to delete queue topic {} due to {}.", queueName, reason);
             queueContainer.deleteQueue(channel.getConnection().getNamespaceName(), queueName);
         }).exceptionally(t -> {
-            log.error("Failed to delete queue topic {} when check {}.", reason, queueName, t);
+            log.error("Failed to delete queue topic {} when check {}.", queueName, reason, t);
             return null;
         });
     }

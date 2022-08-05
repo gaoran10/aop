@@ -182,4 +182,9 @@ public class InMemoryExchange extends AbstractAmqpExchange {
         return null;
     }
 
+    @Override
+    public Map<String, AmqpMessageRouter> getRouters() {
+        return null;
+    }
+
 }

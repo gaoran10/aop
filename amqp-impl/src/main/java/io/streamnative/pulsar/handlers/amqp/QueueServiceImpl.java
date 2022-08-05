@@ -350,8 +350,9 @@ public class QueueServiceImpl implements QueueService {
             }
             if (queue != null && queue.isExclusive() && queue.getConnectionId() != connectionId) {
                 future.completeExceptionally(new AoPException(ErrorCodes.ALREADY_EXISTS,
-                        "cannot obtain exclusive access to locked queue '" + queue + "' in vhost '"
-                                + namespaceName.getLocalName() + "'", false, true));
+                        "cannot obtain exclusive access to locked queue '" + queueName + "' in vhost '"
+                                + namespaceName.getLocalName() + "', queue connectionId is "
+                                + queue.getConnectionId() + ", operation connectionId is " + connectionId, false, true));
                 return;
             }
             future.complete(queue);
