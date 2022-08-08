@@ -88,8 +88,8 @@ public final class MessageConvertUtils {
     private static final String PROP_MANDATORY = BASIC_PUBLISH_INFO_PRE + "mandatory";
     public static final String PROP_ROUTING_KEY = BASIC_PUBLISH_INFO_PRE + "routingKey";
 
-    public static final String PROP_CUSTOM_JSON = BASIC_PUBLISH_INFO_PRE + "custom_json";
-    public static final String PROP_X_DELAY = BASIC_PUBLISH_INFO_PRE + "x-delay";
+    public static final String PROP_CUSTOM_JSON = BASIC_PROP_HEADER_PRE + "custom_json";
+    public static final String PROP_X_DELAY = BASIC_PROP_HEADER_PRE + "x-delay";
 
     private static final Clock clock = Clock.systemDefaultZone();
 
