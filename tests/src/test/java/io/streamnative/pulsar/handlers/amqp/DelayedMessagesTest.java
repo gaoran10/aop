@@ -53,7 +53,7 @@ public class DelayedMessagesTest extends AmqpTestBase{
         long st = System.currentTimeMillis();
 
         long st2 = System.currentTimeMillis();
-        for (int i = 0; i < 50000; i++) {
+        for (int i = 0; i < 100; i++) {
             mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
             mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
             mockBookKeeper.addEntryDelay(0, TimeUnit.SECONDS);
@@ -76,7 +76,7 @@ public class DelayedMessagesTest extends AmqpTestBase{
             public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
                 String msg = new String(body);
                 messageSet.remove(msg);
-//                System.out.println("receive message after " + (System.currentTimeMillis() - st) / 1000 + " s");
+                System.out.println("receive message after " + (System.currentTimeMillis() - st) / 1000 + " s");
                 channel.basicAck(envelope.getDeliveryTag(), false);
             }
         });

@@ -89,6 +89,7 @@ public final class MessageConvertUtils {
     public static final String PROP_ROUTING_KEY = BASIC_PUBLISH_INFO_PRE + "routingKey";
 
     public static final String PROP_CUSTOM_JSON = BASIC_PUBLISH_INFO_PRE + "custom_json";
+    public static final String PROP_X_DELAY = BASIC_PUBLISH_INFO_PRE + "x-delay";
 
     private static final Clock clock = Clock.systemDefaultZone();
 
@@ -136,6 +137,9 @@ public final class MessageConvertUtils {
             setProp(builder, PROP_PROPERTY_FLAGS, props.getPropertyFlags());
 
             setProp(builder, PROP_CUSTOM_JSON, JsonUtil.toJson(props.getHeadersAsMap()));
+            if (props.getHeader("x-delay") != null) {
+                setProp(builder, PROP_X_DELAY, props.getHeader("x-delay"));
+            }
 //            Map<String, Object> headers = props.getHeadersAsMap();
 //            for (Map.Entry<String, Object> entry : headers.entrySet()) {
 //                setProp(builder, BASIC_PROP_HEADER_PRE + entry.getKey(), entry.getValue());

@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class PropertiesTest extends AmqpTestBase{
 
-    @Test()
+//    @Test()
     public void propsTest() throws Exception {
         Connection connection = getConnection("vhost1", true);
         Channel channel = connection.createChannel();
@@ -64,54 +64,7 @@ public class PropertiesTest extends AmqpTestBase{
         channel.basicPublish(ex, qu, props.build(), "test".getBytes());
 
 //        connection.close();
-        Thread.sleep(1000 * 60 * 60);
-    }
-
-    interface ReadCallback {
-        void readFailed(String s);
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        ExecutorService executors = Executors.newSingleThreadExecutor();
-
-        ReadCallback readCallback = new ReadCallback() {
-            @Override
-            public void readFailed(String s) {
-                log.info(s.toLowerCase());
-            }
-        };
-
-        PropertiesTest test = new PropertiesTest();
-        executors.submit(() -> {
-            test.read(executors, readCallback);
-        });
-        System.out.println("test finish");
-        Thread.sleep(1000 * 2);
-        System.out.println("test finish 2");
-        executors.shutdown();
-    }
-
-    public void read(ExecutorService executorService, ReadCallback readCallback) {
-        try {
-            log.info("read method");
-            read0(executorService, readCallback);
-        } catch (Throwable e) {
-            log.error("read 0 error ", e);
-        }
-    }
-
-    public void read0(ExecutorService executorService, ReadCallback readCallback) {
-        process().thenAcceptAsync(s -> {
-            log.info("process finish");
-            readCallback.readFailed(s);
-        }, executorService).exceptionally(s -> {
-            log.error("failed to process", s);
-            return null;
-        });
-    }
-
-    public CompletableFuture<String> process() {
-        return CompletableFuture.completedFuture(null);
+//        Thread.sleep(1000 * 60 * 60);
     }
 
 }
