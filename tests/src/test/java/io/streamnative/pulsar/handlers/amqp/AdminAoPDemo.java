@@ -8,17 +8,7 @@ import org.testng.annotations.Test;
 
 public class AdminAoPDemo extends AmqpTestBase {
 
-//    @Test
-    public void connectionTest() throws Exception {
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setPort(getAmqpBrokerPortList().get(0));
-        Connection connection = factory.newConnection("test connection");
-        Channel channel = connection.createChannel();
-        System.out.println("start");
-        Thread.sleep(1000 * 60 * 60);
-    }
-
-//    @Test
+    @Test
     public void bindTest() throws Exception {
         ConnectionFactory factory = new ConnectionFactory();
         factory.setPort(getAmqpBrokerPortList().get(0));

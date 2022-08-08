@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
 public class PropertiesTest extends AmqpTestBase{
 
     @Test()
-    public void listExchangeTest() throws Exception {
+    public void propsTest() throws Exception {
         Connection connection = getConnection("vhost1", true);
         Channel channel = connection.createChannel();
 
@@ -48,7 +48,6 @@ public class PropertiesTest extends AmqpTestBase{
         channel.queueDeclare(qu, true, false, false, null);
         channel.queueBind(qu, ex, "");
 
-
         channel.basicConsume(qu, false, new DefaultConsumer(channel) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
@@ -58,13 +57,14 @@ public class PropertiesTest extends AmqpTestBase{
 
         AMQP.BasicProperties.Builder props = new AMQP.BasicProperties.Builder();
         Map<String, Object> headers = new HashMap<>();
-        headers.put("a", "av");
-        headers.put("b", "bv");
+        headers.put("int", 10);
+        headers.put("double", 20.123);
+        headers.put("boolean", true);
         props.headers(headers);
-        channel.basicPublish(ex, "", props.build(), "test".getBytes());
+        channel.basicPublish(ex, qu, props.build(), "test".getBytes());
 
-        connection.close();
-//        Thread.sleep(1000 * 60 * 60);
+//        connection.close();
+        Thread.sleep(1000 * 60 * 60);
     }
 
     interface ReadCallback {

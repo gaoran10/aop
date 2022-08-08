@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.bookkeeper.common.util.JsonUtil;
 import org.apache.bookkeeper.mledger.impl.EntryImpl;
 import org.apache.pulsar.client.impl.MessageImpl;
 import org.apache.qpid.server.bytebuffer.QpidByteBuffer;
@@ -46,7 +47,7 @@ import org.testng.annotations.Test;
 public class MessageConvertTest {
 
     @Test
-    private void test() throws UnsupportedEncodingException {
+    private void test() throws UnsupportedEncodingException, JsonUtil.ParseJsonException {
         String exchange = "testExchange";
         boolean immediate = true;
         boolean mandatory = false;

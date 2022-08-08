@@ -45,7 +45,7 @@ public class Bindings extends BindingBase {
 
     @GET
     @Path("/{vhost}")
-    public void getBindingList(@Suspended final AsyncResponse response, @PathParam("vhost") String vhost) {
+    public void getBindingListByVhost(@Suspended final AsyncResponse response, @PathParam("vhost") String vhost) {
         getBindingListByVhostAsync(vhost)
                 .thenAccept(response::resume)
                 .exceptionally(t -> {
