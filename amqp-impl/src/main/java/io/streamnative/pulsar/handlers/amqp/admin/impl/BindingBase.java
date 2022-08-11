@@ -109,6 +109,7 @@ public class BindingBase extends BaseResources {
                             bean.setRoutingKey(binding.getBindingKey());
                             bean.setPropertiesKey(binding.getPropsKey());
                             bean.setDestinationType("exchange");
+                            bean.setArguments(router.getArguments());
                             beanList.add(bean);
                         }
                     }

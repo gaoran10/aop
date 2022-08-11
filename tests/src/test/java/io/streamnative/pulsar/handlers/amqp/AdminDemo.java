@@ -4,9 +4,6 @@ import com.rabbitmq.client.BuiltinExchangeType;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
-import org.apache.qpid.server.protocol.v0_8.AMQShortString;
-import org.testng.annotations.Test;
-
 import java.util.HashMap;
 import java.util.Map;
 
