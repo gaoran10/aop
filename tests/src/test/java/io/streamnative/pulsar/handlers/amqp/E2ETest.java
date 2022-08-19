@@ -26,12 +26,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.common.policies.data.ManagedLedgerInternalStats;
+import org.apache.pulsar.common.policies.data.PersistentTopicInternalStats;
 import org.awaitility.Awaitility;
 import org.testng.annotations.Test;
 
 /**
  * Admin API test.
  */
+@Slf4j
 public class E2ETest extends AmqpTestBase{
 
     @Test()
@@ -211,6 +216,42 @@ public class E2ETest extends AmqpTestBase{
         Awaitility.await()
                 .pollInterval(1, TimeUnit.SECONDS)
                 .atMost(5, TimeUnit.SECONDS).until(messageSet::isEmpty);
+
+        verifyBacklog(predicationInput);
+        verifyBacklog(predicationInputHeaders);
+        verifyBacklog(verificationInput);
+        verifyBacklog(analyticsInput);
+        verifyBacklog(finalizingInput);
+    }
+
+    private void verifyBacklog(String exchangeName) {
+        Awaitility.await()
+                .pollInterval(1, TimeUnit.SECONDS)
+                .atMost(3, TimeUnit.SECONDS)
+                .until(() -> checkBacklog(exchangeName));
+    }
+
+    private boolean checkBacklog(String exchangeName) throws PulsarAdminException {
+        String topic = "public/vhost1/__amqp_exchange__" + exchangeName;
+        PersistentTopicInternalStats stats = admin.topics().getInternalStats(topic);
+        Map<String, ManagedLedgerInternalStats.CursorStats> map = stats.cursors;
+        if (map.isEmpty()) {
+            return false;
+        }
+        for (Map.Entry<String, ManagedLedgerInternalStats.CursorStats> entry : map.entrySet()) {
+            if (entry.getKey().startsWith("__amqp_replicator")) {
+                continue;
+            }
+            log.info("Stats exchange: {}, cursor: {}, lac: {}, markDelete: {}",
+                    exchangeName,
+                    entry.getKey(),
+                    stats.lastConfirmedEntry,
+                    entry.getValue().markDeletePosition);
+            if (!stats.lastConfirmedEntry.equals(entry.getValue().markDeletePosition)) {
+                return false;
+            }
+        }
+        return true;
     }
 
 }

@@ -31,14 +31,22 @@ import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import io.streamnative.pulsar.handlers.amqp.utils.PulsarTopicMetadataUtils;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.Entry;
+import org.apache.bookkeeper.mledger.ManagedCursor;
+import org.apache.bookkeeper.mledger.ManagedLedgerException;
+import org.apache.bookkeeper.mledger.Position;
+import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.impl.MessageImpl;
@@ -63,7 +71,11 @@ public class PersistentQueue extends AbstractAmqpQueue {
 
     private AmqpEntryWriter amqpEntryWriter;
 
+    @Getter
     private QueueMetrics queueMetrics;
+
+    private PositionImpl lastLac;
+    private final Map<String, Position> exchangeLastMarkDeletePos = new ConcurrentHashMap<>();
 
     public PersistentQueue(String queueName, PersistentTopic indexTopic,
                            long connectionId,
@@ -75,6 +87,8 @@ public class PersistentQueue extends AbstractAmqpQueue {
         this.jsonMapper = new ObjectMapper();
         this.amqpEntryWriter = new AmqpEntryWriter(indexTopic);
         this.queueMetrics = queueMetrics;
+        this.indexTopic.getBrokerService().getPulsar().getExecutor()
+                .schedule(this::exchangeClear, 5, TimeUnit.SECONDS);
     }
 
     @Override
@@ -119,7 +133,30 @@ public class PersistentQueue extends AbstractAmqpQueue {
     @Override
     public CompletableFuture<Void> acknowledgeAsync(String exchangeName, long ledgerId, long entryId) {
         queueMetrics.ackInc();
-        return getRouter(exchangeName).getExchange().markDeleteAsync(getName(), ledgerId, entryId);
+//        return getRouter(exchangeName).getExchange().markDeleteAsync(getName(), ledgerId, entryId);
+//        PositionImpl indexMarkDeletePos = (PositionImpl) indexTopic.getManagedLedger()
+//                .getSlowestConsumer().getMarkDeletedPosition();
+//        Collection<CompletableFuture<Void>> futures = new ArrayList<>();
+//        log.info("xxxx 1 queue ack exchange, queue: {}, exchange: {}, indexDeletePos: {}, indexLac: {}",
+//                queueName, exchangeName, indexMarkDeletePos, this.lastLac);
+//        if (this.lastLac == null) {
+//            this.getBindExchangeLac();
+//            return CompletableFuture.completedFuture(null);
+//        }
+//        if (indexMarkDeletePos.compareTo(this.lastLac) >= 0) {
+//            for (AmqpMessageRouter router : routers.values()) {
+//                Position position = exchangeLastMarkDeletePos.get(router.getExchange().getName());
+//                if (position != null) {
+//                    log.info("xxxx 2 queue ack exchange, queue: {}, exchange: {}, position: {}",
+//                            queueName, exchangeName, position);
+//                    futures.add(getRouter(exchangeName).getExchange().markDeleteAsync(
+//                            queueName, position.getLedgerId(), position.getEntryId()));
+//                }
+//            }
+//            FutureUtil.waitForAll(futures).thenRun(this::getBindExchangeLac);
+//        }
+//        return FutureUtil.waitForAll(futures);
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override
@@ -205,12 +242,58 @@ public class PersistentQueue extends AbstractAmqpQueue {
         return propertiesList;
     }
 
-
     private void topicNameValidate() {
         String[] nameArr = this.indexTopic.getName().split("/");
         checkArgument(nameArr[nameArr.length - 1].equals(TOPIC_PREFIX + queueName),
                 "The queue topic name does not conform to the rules(%s%s).",
                 TOPIC_PREFIX, "exchangeName");
+    }
+
+    private synchronized void exchangeClear() {
+        this.lastLac = null;
+        Collection<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (AmqpMessageRouter router : routers.values()) {
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            ((PersistentTopic) router.getExchange().getTopic()).getManagedLedger()
+                    .asyncOpenCursor("__amqp_replicator__" + router.getExchange().getName(), new AsyncCallbacks.OpenCursorCallback() {
+                @Override
+                public void openCursorComplete(ManagedCursor cursor, Object ctx) {
+                    PositionImpl pos = (PositionImpl) cursor.getMarkDeletedPosition();
+                    exchangeLastMarkDeletePos.put(router.getExchange().getName(), pos);
+                    future.complete(null);
+                }
+
+                @Override
+                public void openCursorFailed(ManagedLedgerException exception, Object ctx) {
+                    future.completeExceptionally(exception);
+                }
+            }, null);
+            futures.add(future);
+        }
+        FutureUtil.waitForAll(futures).thenAccept(__ -> {
+            this.lastLac = (PositionImpl) indexTopic.getLastPosition();
+            exchangeDelete();
+        });
+    }
+
+    private void exchangeDelete() {
+        PositionImpl indexMarkDeletePos = (PositionImpl) indexTopic.getManagedLedger()
+                .getSlowestConsumer().getMarkDeletedPosition();
+        Collection<CompletableFuture<Void>> futures = new ArrayList<>();
+        if (indexMarkDeletePos.compareTo(this.lastLac) >= 0) {
+            for (AmqpMessageRouter router : routers.values()) {
+                Position position = exchangeLastMarkDeletePos.get(router.getExchange().getName());
+                if (position != null) {
+                    futures.add(router.getExchange().markDeleteAsync(
+                            queueName, position.getLedgerId(), position.getEntryId()));
+                }
+            }
+            FutureUtil.waitForAll(futures).thenRun(() -> {
+                this.indexTopic.getBrokerService().getPulsar().getExecutor().schedule(this::exchangeClear, 5, TimeUnit.SECONDS);
+            });
+        } else {
+            this.indexTopic.getBrokerService().getPulsar().getExecutor().schedule(this::exchangeDelete, 5, TimeUnit.SECONDS);
+        }
     }
 
 }

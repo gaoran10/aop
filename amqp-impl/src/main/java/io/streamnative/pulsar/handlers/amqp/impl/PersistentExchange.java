@@ -349,7 +349,6 @@ public class PersistentExchange extends AbstractAmqpExchange {
                 return v;
             });
         }
-        createCursorIfNotExists(getExBindCursorName(destinationEx));
         return CompletableFuture.completedFuture(null);
     }
 
