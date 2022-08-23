@@ -27,6 +27,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
@@ -61,6 +63,7 @@ public class AmqpConsumer extends Consumer {
 
     private final String consumerTag;
 
+    @Getter
     private final String queueName;
     /**
      * map(exchangeName,treeMap(indexPosition,msgPosition)) .

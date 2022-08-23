@@ -27,7 +27,6 @@ import io.streamnative.pulsar.handlers.amqp.flow.AmqpFlowCreditManager;
 import io.streamnative.pulsar.handlers.amqp.impl.PersistentQueue;
 import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -42,7 +41,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.log4j.Log4j2;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.service.BrokerServiceException;
-import org.apache.pulsar.broker.service.Consumer;
 import org.apache.pulsar.broker.service.Subscription;
 import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
@@ -182,10 +180,10 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                         connection.getMethodRegistry().createExchangeDeclareOkBody().generateFrame(channelId));
             }
         }).exceptionally(t -> {
-            log.error("Failed to declare exchange {} in vhost {}. type: {}, passive: {}, durable: {}, "
-                            + "autoDelete: {}, nowait: {}, arguments: {}", exchange, connection.getNamespaceName(),
-                    type, passive, durable, autoDelete, nowait, arguments, t);
-            handleAoPException(t);
+            String msg = String.format("Failed to declare exchange %s in vhost %s. type: %s, passive: %s, durable: %s, "
+                            + "autoDelete: %s, nowait: %s, arguments: %s", exchange, connection.getNamespaceName(),
+                    type, passive, durable, autoDelete, nowait, arguments);
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -203,9 +201,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 })
                 .exceptionally(t -> {
-                    log.error("Failed to delete exchange {} in vhost {}.",
-                            exchange, connection.getNamespaceName(), t);
-                    handleAoPException(t);
+                    String msg = String.format("Failed to delete exchange %s in vhost %s.",
+                            exchange, connection.getNamespaceName());
+                    handleAoPException(t, msg);
                     return null;
                 });
     }
@@ -239,9 +237,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     connection.writeAndFlushFrame(exchangeBoundOkBody.generateFrame(channelId));
                 })
                 .exceptionally(t -> {
-                    log.error("Failed to bound queue {} to exchange {} with routingKey {} in vhost {}",
-                            queueName, exchange, routingKey, connection.getNamespaceName(), t);
-                    handleAoPException(t);
+                    String msg = String.format("Failed to bound queue %s to exchange %s with routingKey %s in vhost %s",
+                            queueName, exchange, routingKey, connection.getNamespaceName());
+                    handleAoPException(t, msg);
                     return null;
                 });
     }
@@ -262,8 +260,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     AMQShortString.createAMQShortString(amqpQueue.getName()), 0, 0);
             connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
-            log.error("Failed to declare queue {} in vhost {}", queue, connection.getNamespaceName(), t);
-            handleAoPException(t);
+            String msg = String.format("Failed to declare queue %s in vhost %s", queue, connection.getNamespaceName());
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -282,8 +280,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             AMQMethodBody responseBody = methodRegistry.createQueueBindOkBody();
             connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
-            log.error("Failed to bind queue {} to exchange {}.", queue, exchange, t);
-            handleAoPException(t);
+            String msg = String.format("Failed to bind queue %s to exchange %s.", queue, exchange);
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -299,8 +297,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                     AMQMethodBody responseBody = methodRegistry.createQueuePurgeOkBody(0);
                     connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
                 }).exceptionally(t -> {
-                    log.error("Failed to purge queue {} in vhost {}", queue, connection.getNamespaceName(), t);
-                    handleAoPException(t);
+                    String msg = String.format("Failed to purge queue %s in vhost %s",
+                            queue, connection.getNamespaceName());
+                    handleAoPException(t, msg);
                     return null;
                 });
     }
@@ -311,16 +310,31 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             log.debug("RECV[{}] QueueDelete[ queue: {}, ifUnused:{}, ifEmpty:{}, nowait:{} ]", channelId, queue,
                     ifUnused, ifEmpty, nowait);
         }
-        queueService.queueDelete(connection.getNamespaceName(), getQueueName(queue), ifUnused,
+        final String queueName = getQueueName(queue);
+        queueService.queueDelete(connection.getNamespaceName(), queueName, ifUnused,
                         ifEmpty, connection.getConnectionId())
                 .thenAccept(__ -> {
-                    MethodRegistry methodRegistry = connection.getMethodRegistry();
-                    QueueDeleteOkBody responseBody = methodRegistry.createQueueDeleteOkBody(0);
-                    connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
+                    tag2ConsumersMap.forEach((k, v) -> {
+                        if (v.getQueueName().equals(getQueueName(queue))) {
+                            tag2ConsumersMap.remove(k);
+                        }
+                    });
+                    fetchConsumerMap.forEach((k, v) -> {
+                        if (v.getQueueName().equals(getQueueName(queue))) {
+                            fetchConsumerMap.remove(k);
+                        }
+                    });
+                    if (!nowait) {
+                        MethodRegistry methodRegistry = connection.getMethodRegistry();
+                        QueueDeleteOkBody responseBody = methodRegistry.createQueueDeleteOkBody(1);
+                        connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
+                        System.out.println("xxxx send delete ok command " + queue);
+                    }
                 })
                 .exceptionally(t -> {
-                    log.error("Failed to delete queue " + queue, t);
-                    handleAoPException(t);
+                    String msg = String.format("Failed to delete queue %s in vhost %s",
+                            queueName, connection.getNamespaceName());
+                    handleAoPException(t, msg);
                     return null;
                 });
     }
@@ -352,9 +366,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             AMQMethodBody responseBody = connection.getMethodRegistry().createQueueUnbindOkBody();
             connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
         }).exceptionally(t -> {
-            log.error("Failed to unbind queue {} with exchange {} in vhost {}",
-                    queue, exchange, connection.getNamespaceName(), t);
-            handleAoPException(t);
+            String msg = String.format("Failed to unbind queue %s with exchange %s in vhost %s",
+                    queue, exchange, connection.getNamespaceName());
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -391,8 +405,7 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                         connection.getConnectionId());
         amqpQueueCompletableFuture.whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
-                log.error("Failed to get the queue from the queue container", throwable);
-                handleAoPException(throwable);
+                handleAoPException(throwable, "Failed to get the queue from the queue container");
             } else {
                 if (amqpQueue == null) {
                     closeChannel(ErrorCodes.NOT_FOUND, "No such queue: '" + queue.toString() + "'");
@@ -538,8 +551,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                         connection.getConnectionId());
         amqpQueueCompletableFuture.whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
-                log.error("Get Topic error:{}", throwable.getMessage());
-                handleAoPException(throwable);
+                String msg = String.format("Get Topic error: %s", throwable.getMessage());
+                handleAoPException(throwable, msg);
             } else {
                 if (amqpQueue == null) {
                     closeChannel(ErrorCodes.NOT_FOUND, "No such queue: " + queueName);
@@ -873,9 +886,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             ExchangeBindOkBody body = new ExchangeBindOkBody();
             connection.writeAndFlushFrame(body.generateFrame(channelId));
         }).exceptionally(t -> {
-            log.error("Failed to bind exchange {} to source {} with bindingKey {} in vhost {}",
-                    destination, source, bindingKey, fieldTable, t);
-            handleAoPException(t);
+            String msg = String.format("Failed to bind exchange %s to source %s with bindingKey %s in vhost %s",
+                    destination, source, bindingKey, fieldTable);
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -890,9 +903,9 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
             ExchangeUnbindOkBody body = new ExchangeUnbindOkBody();
             connection.writeAndFlushFrame(body.generateFrame(channelId));
         }).exceptionally(t -> {
-            log.error("Failed to unbind exchange {} to source {} with bindingKey {} in vhost {}",
-                    destination, source, bindingKey, fieldTable, t);
-            handleAoPException(t);
+            String msg = String.format("Failed to unbind exchange %s to source %s with bindingKey %s in vhost %s",
+                    destination, source, bindingKey, fieldTable);
+            handleAoPException(t, msg);
             return null;
         });
     }
@@ -1049,13 +1062,19 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
         return creditManager;
     }
 
-    private void handleAoPException(Throwable t) {
+    private void handleAoPException(Throwable t, String errorMsg) {
         Throwable cause = FutureUtil.unwrapCompletionException(t);
         if (!(cause instanceof AoPException)) {
+            log.error(errorMsg, t);
             connection.sendConnectionClose(INTERNAL_ERROR, t.getMessage(), channelId);
             return;
         }
         AoPException exception = (AoPException) cause;
+        if (exception.isPrintStack()) {
+            log.error(errorMsg, exception.getCause());
+        } else {
+            log.error(errorMsg);
+        }
         if (exception.isCloseChannel()) {
             closeChannel(exception.getErrorCode(), exception.getMessage());
         }

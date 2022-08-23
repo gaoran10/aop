@@ -15,6 +15,7 @@ package io.streamnative.pulsar.handlers.amqp;
 
 import io.netty.channel.ChannelHandlerContext;
 import org.apache.pulsar.broker.PulsarService;
+import org.apache.pulsar.broker.service.Consumer;
 import org.apache.pulsar.broker.service.ServerCnx;
 
 /**
@@ -26,6 +27,11 @@ public class AmqpPulsarServerCnx extends ServerCnx {
         super(pulsar);
         this.ctx = ctx;
         this.remoteAddress = ctx.channel().remoteAddress();
+    }
+
+    @Override
+    public void closeConsumer(Consumer consumer) {
+        // do nothing
     }
 
 }

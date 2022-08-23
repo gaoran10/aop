@@ -66,7 +66,7 @@ public class QueueServiceImpl implements QueueService {
         getQueue(namespaceName, finalQueue.toString(), !passive, autoDelete, exclusive, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
-                log.error("Failed to get topic from queue container", throwable);
+                log.error("Failed to get topic from queue container, {}", throwable.getMessage());
                 future.completeExceptionally(getAoPException(throwable, "Failed to get queue: " + finalQueue + ", "
                         + throwable.getMessage(), true, false));
             } else {
@@ -92,7 +92,7 @@ public class QueueServiceImpl implements QueueService {
         getQueue(namespaceName, queue, false, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
-                log.error("Failed to get topic from queue container", throwable);
+                log.error("Failed to get topic from queue container, {}", throwable.getMessage());
                 future.completeExceptionally(getAoPException(throwable, "Failed to get queue: "
                         + queue + ", " + throwable.getMessage(), true, false));
             } else {
@@ -156,7 +156,7 @@ public class QueueServiceImpl implements QueueService {
         getQueue(namespaceName, queue, false, connectionId)
                 .whenComplete(((amqpQueue, throwable) -> {
                     if (throwable != null) {
-                        log.error("Failed to get topic {} from queue container", queue, throwable);
+                        log.error("Failed to get topic {} from queue container, {}", queue, throwable.getMessage());
                         future.completeExceptionally(getAoPException(throwable, "Failed to get queue: "
                                 + queue + ", " + throwable.getMessage(), true, false));
                         return;
@@ -188,7 +188,7 @@ public class QueueServiceImpl implements QueueService {
         getQueue(namespaceName, queue,  false, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
-                log.error("Failed to get topic from queue container", throwable);
+                log.error("Failed to get topic from queue container, {}", throwable.getMessage());
                 future.completeExceptionally(getAoPException(throwable,
                         "Failed to get queue: " + throwable.getMessage(), true, false));
             } else {
@@ -249,7 +249,7 @@ public class QueueServiceImpl implements QueueService {
         getQueue(namespaceName, queue, false, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
                     if (throwable != null) {
-                        log.error("Failed to get topic from queue container", throwable);
+                        log.error("Failed to get topic from queue container, {}", throwable.getMessage());
                         future.completeExceptionally(getAoPException(throwable, "Failed to get queue: "
                                 + queue + ", " + throwable.getMessage(), true, false));
                     } else {
@@ -352,7 +352,8 @@ public class QueueServiceImpl implements QueueService {
                 future.completeExceptionally(new AoPException(ErrorCodes.ALREADY_EXISTS,
                         "cannot obtain exclusive access to locked queue '" + queueName + "' in vhost '"
                                 + namespaceName.getLocalName() + "', queue connectionId is "
-                                + queue.getConnectionId() + ", operation connectionId is " + connectionId, false, true));
+                                + queue.getConnectionId() + ", operation connectionId is "
+                                + connectionId, true, false, false));
                 return;
             }
             future.complete(queue);

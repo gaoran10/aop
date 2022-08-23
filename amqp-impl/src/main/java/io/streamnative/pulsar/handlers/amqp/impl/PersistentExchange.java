@@ -305,6 +305,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
     @Override
     public void removeQueue(AmqpQueue queue) {
         queues.remove(queue);
+        if (bindingKeyQueueMap != null) {
+            for (Set<AmqpQueue> queueSet : bindingKeyQueueMap.values()) {
+                queueSet.remove(queue);
+            }
+        }
         updateExchangeProperties();
         deleteCursor(queue.getName());
     }

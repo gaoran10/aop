@@ -25,14 +25,12 @@ import org.junit.Assert;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import static org.testng.AssertJUnit.assertFalse;
+import static org.testng.AssertJUnit.assertTrue;
 
 /**
  * Admin API test.
@@ -86,6 +84,80 @@ public class AutoDeleteTest extends AmqpTestBase{
 //        }
 
         connection.close();
+    }
+
+    @Test()
+    public void queueAutoDeleteTest() throws Exception {
+        Connection connection = getConnection("vhost1", true);
+        Channel channel = connection.createChannel();
+
+        String qu = randQuName();
+
+        channel.queueDeclare(qu, true, true, true, null);
+        channel.queueDeclarePassive(qu);
+
+        Set<String> messageSet = new HashSet<>();
+        channel.basicConsume(qu, true, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("receive message ");
+                messageSet.remove(new String(body));
+            }
+        });
+
+        messageSet.add("test");
+        channel.basicPublish("", qu, null, "test".getBytes());
+
+        Awaitility.await().pollInterval(1, TimeUnit.SECONDS)
+                .atMost(2, TimeUnit.SECONDS)
+                .until(messageSet::isEmpty);
+        channel.close();
+        connection.close();
+
+        System.out.println("connection isOpen: " + connection.isOpen());
+        connection = getConnection("vhost1", true);
+        channel = connection.createChannel();
+        System.out.println("declare queue again");
+
+        channel.queueDeclare(qu, true, true, true, null);
+
+        Set<String> messageSet2 = new HashSet<>();
+        channel.basicConsume(qu, true, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("receive message 2");
+                messageSet2.remove(new String(body));
+            }
+        });
+
+        messageSet2.add("test");
+        channel.basicPublish("", qu, null, "test".getBytes());
+
+        Awaitility.await().pollInterval(1, TimeUnit.SECONDS)
+                .atMost(2, TimeUnit.SECONDS)
+                .until(messageSet2::isEmpty);
+
+        connection.close();
+    }
+
+    @Test
+    public void exclusiveTest() throws Exception {
+        Connection connection = getConnection("vhost1", true);
+        Channel channel = connection.createChannel();
+
+        String qu = randQuName();
+        channel.queueDeclare(qu, true, true, false, null);
+
+        Connection connection2 = getConnection("vhost1", true);
+        Channel channel2 = connection2.createChannel();
+
+        try {
+            channel2.queueDeclare(qu, true, true, false, null);
+        } catch (Exception e) {
+            // expected exception
+        }
+        assertFalse(channel2.isOpen());
+        assertTrue(connection2.isOpen());
     }
 
 }

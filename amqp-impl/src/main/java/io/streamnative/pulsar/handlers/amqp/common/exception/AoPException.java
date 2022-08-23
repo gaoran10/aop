@@ -23,12 +23,23 @@ public class AoPException extends RuntimeException {
     private final boolean closeChannel;
     @Getter
     private final boolean closeConnection;
+    @Getter
+    private final boolean printStack;
 
     public AoPException(int errorCode, String msg, boolean closeChannel, boolean closeConnection) {
         super(msg);
         this.errorCode = errorCode;
         this.closeChannel = closeChannel;
         this.closeConnection = closeConnection;
+        this.printStack = true;
+    }
+
+    public AoPException(int errorCode, String msg, boolean closeChannel, boolean closeConnection, boolean printStack) {
+        super(msg);
+        this.errorCode = errorCode;
+        this.closeChannel = closeChannel;
+        this.closeConnection = closeConnection;
+        this.printStack = printStack;
     }
 
 }
