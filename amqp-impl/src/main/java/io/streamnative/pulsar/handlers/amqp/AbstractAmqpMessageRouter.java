@@ -44,6 +44,7 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     protected Set<String> bindingKeys;
     protected ConcurrentHashMap<String, AmqpBinding> bindings;
     protected Map<String, Object> arguments;
+    protected volatile boolean haveChanges = false;
 
     protected AbstractAmqpMessageRouter(Type routerType) {
         this.routerType = routerType;
@@ -89,11 +90,13 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public void addBindingKey(String bindingKey) {
         this.bindingKeys.add(bindingKey);
+        this.haveChanges = true;
     }
 
     @Override
     public void setBindingKeys(Set<String> bindingKeys) {
         this.bindingKeys = bindingKeys;
+        this.haveChanges = true;
     }
 
     @Override
@@ -104,11 +107,13 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public void addBinding(AmqpBinding binding) {
         this.bindings.put(binding.getPropsKey(), binding);
+        this.haveChanges = true;
     }
 
     @Override
     public void setBindings(Map<String, AmqpBinding> bindings) {
         this.bindings = new ConcurrentHashMap<>(bindings);
+        this.haveChanges = true;
     }
 
     @Override
@@ -119,6 +124,7 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
     @Override
     public void setArguments(Map<String, Object> arguments) {
         this.arguments = arguments;
+        this.haveChanges = true;
     }
 
     @Override

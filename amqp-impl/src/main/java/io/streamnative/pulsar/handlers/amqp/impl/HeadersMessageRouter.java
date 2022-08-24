@@ -72,6 +72,11 @@ public class HeadersMessageRouter extends AbstractAmqpMessageRouter {
     }
 
     private void initMappings() {
+        if (!haveChanges) {
+            return;
+        }
+        required.clear();
+        matches.clear();
         for (Map.Entry<String, Object> entry : arguments.entrySet()) {
             String propertyName = entry.getKey();
             Object value = entry.getValue();

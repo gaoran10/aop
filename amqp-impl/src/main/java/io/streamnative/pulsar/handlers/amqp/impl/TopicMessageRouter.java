@@ -16,10 +16,7 @@ package io.streamnative.pulsar.handlers.amqp.impl;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpBinding;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
-import java.util.Collection;
-import java.util.Iterator;
 import java.util.Map;
-import org.apache.qpid.server.exchange.topic.TopicMatcherResult;
 import org.apache.qpid.server.exchange.topic.TopicParser;
 
 /**
@@ -31,6 +28,8 @@ public class TopicMessageRouter extends AbstractAmqpMessageRouter {
         super(Type.Topic);
     }
 
+    private TopicParser parser = new TopicParser();
+
     /**
      * Use Qpid.
      *
@@ -38,20 +37,8 @@ public class TopicMessageRouter extends AbstractAmqpMessageRouter {
      * @return
      */
     public boolean isMatch(String routingKey) {
-        TopicParser parser = new TopicParser();
-        Iterator iterator = this.bindingKeys.iterator();
-        while (iterator.hasNext()) {
-            parser.addBinding((String) iterator.next(), null);
-        }
-        for (AmqpBinding binding : this.bindings.values()) {
-            parser.addBinding(binding.getBindingKey(), null);
-        }
-        Collection<TopicMatcherResult> results = parser.parse(routingKey);
-        if (results.size() > 0) {
-            return true;
-        } else {
-            return false;
-        }
+        updateParserIfNeeded();
+        return parser.parse(routingKey).size() > 0;
     }
 
     /**
@@ -64,6 +51,20 @@ public class TopicMessageRouter extends AbstractAmqpMessageRouter {
     public boolean isMatch(Map<String, Object> properties) {
         String routingKey = properties.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
         return isMatch(routingKey);
+    }
+
+    private void updateParserIfNeeded() {
+        if (!haveChanges) {
+            return;
+        }
+        parser = new TopicParser();
+        for (String bindingKey : this.bindingKeys) {
+            parser.addBinding(bindingKey, null);
+        }
+        for (AmqpBinding binding : this.bindings.values()) {
+            parser.addBinding(binding.getBindingKey(), null);
+        }
+        this.haveChanges = false;
     }
 
 }
