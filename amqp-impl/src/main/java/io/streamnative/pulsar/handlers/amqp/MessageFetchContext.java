@@ -111,8 +111,8 @@ public final class MessageFetchContext {
                                 } catch (Exception e) {
                                     log.error("Failed to convert entry to AMQP body", e);
                                 }
-                                consumer.addUnAckMessages(indexMessage.getExchangeName(),
-                                        (PositionImpl) index.getPosition(), (PositionImpl) msg.getPosition());
+//                                consumer.addUnAckMessages(indexMessage.getExchangeName(),
+//                                        (PositionImpl) index.getPosition(), (PositionImpl) msg.getPosition());
                             } else {
                                 message.complete(Pair.of(index.getPosition(), null));
                             }

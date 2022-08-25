@@ -106,6 +106,9 @@ public class AmqpEntryWriter implements AsyncCallbacks.AddEntryCallback {
         log.error("[{}] Failed to write entry.", topic.getName(), exception);
         context.positionFuture.completeExceptionally(exception);
         context.recycle();
+        if (exception instanceof ManagedLedgerException.ManagedLedgerAlreadyClosedException) {
+            topic.getManagedLedger().readyToCreateNewLedger();
+        }
     }
 
 }

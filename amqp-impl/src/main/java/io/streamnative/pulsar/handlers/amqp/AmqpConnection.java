@@ -536,7 +536,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         ExtensionServerChannelMethodProcessor channelMethodProcessor = getChannel(channelId);
         if (channelMethodProcessor == null) {
             channelMethodProcessor = (ExtensionServerChannelMethodProcessor) Proxy.newProxyInstance(
-                    ServerMethodDispatcher.class.getClassLoader(),
+                    AmqpProtocolHandler.class.getClassLoader(),
                 new Class[] {ServerChannelMethodProcessor.class}, new InvocationHandler() {
                     @Override
                     public Object invoke(final Object proxy, final Method method, final Object[] args)

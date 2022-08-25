@@ -167,8 +167,8 @@ public class AmqpConsumer extends Consumer {
                     try {
                         long deliveryTag = channel.getNextDeliveryTag();
 
-                        addUnAckMessages(indexMessage.getExchangeName(), (PositionImpl) index.getPosition(),
-                                (PositionImpl) msg.getPosition());
+//                        addUnAckMessages(indexMessage.getExchangeName(), (PositionImpl) index.getPosition(),
+//                                (PositionImpl) msg.getPosition());
                         if (!autoAck) {
                             channel.getUnacknowledgedMessageMap().add(deliveryTag,
                                     index.getPosition(), this, msg.getLength());
@@ -208,28 +208,28 @@ public class AmqpConsumer extends Consumer {
 
     public void messagesAck(List<Position> position) {
         incrementPermits(position.size());
-        ManagedCursor cursor = ((PersistentSubscription) getSubscription()).getCursor();
-        Position previousMarkDeletePosition = cursor.getMarkDeletedPosition();
+//        ManagedCursor cursor = ((PersistentSubscription) getSubscription()).getCursor();
+//        Position previousMarkDeletePosition = cursor.getMarkDeletedPosition();
         getSubscription().acknowledgeMessage(position, CommandAck.AckType.Individual, Collections.EMPTY_MAP);
-        if (!cursor.getMarkDeletedPosition().equals(previousMarkDeletePosition)) {
-            asyncGetQueue().whenComplete((amqpQueue, throwable) -> {
-                if (throwable != null) {
-                    log.error("Failed to get queue from queue container", throwable);
-                } else {
-                    synchronized (this) {
-                        PositionImpl newDeletePosition = (PositionImpl) cursor.getMarkDeletedPosition();
-                        unAckMessages.forEach((key, value) -> {
-                            SortedMap<PositionImpl, PositionImpl> ackMap = value.headMap(newDeletePosition, true);
-                            if (ackMap.size() > 0) {
-                                PositionImpl lastValue = ackMap.get(ackMap.lastKey());
-                                amqpQueue.acknowledgeAsync(key, lastValue.getLedgerId(), lastValue.getEntryId());
-                            }
-                            ackMap.clear();
-                        });
-                    }
-                }
-            });
-        }
+//        if (!cursor.getMarkDeletedPosition().equals(previousMarkDeletePosition)) {
+//            asyncGetQueue().whenComplete((amqpQueue, throwable) -> {
+//                if (throwable != null) {
+//                    log.error("Failed to get queue from queue container", throwable);
+//                } else {
+//                    synchronized (this) {
+//                        PositionImpl newDeletePosition = (PositionImpl) cursor.getMarkDeletedPosition();
+//                        unAckMessages.forEach((key, value) -> {
+//                            SortedMap<PositionImpl, PositionImpl> ackMap = value.headMap(newDeletePosition, true);
+//                            if (ackMap.size() > 0) {
+//                                PositionImpl lastValue = ackMap.get(ackMap.lastKey());
+//                                amqpQueue.acknowledgeAsync(key, lastValue.getLedgerId(), lastValue.getEntryId());
+//                            }
+//                            ackMap.clear();
+//                        });
+//                    }
+//                }
+//            });
+//        }
     }
 
     public void messagesAck(Position position) {
