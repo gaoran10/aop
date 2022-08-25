@@ -37,7 +37,12 @@ import java.util.Map;
 @Slf4j
 public class E2EDemo {
 
-    @Test()
+
+    public static void main(String[] args) throws Exception {
+        E2EDemo demo = new E2EDemo();
+        demo.pinTest();
+    }
+
     public void pinTest() throws Exception {
         ConnectionFactory factory = new ConnectionFactory();
         factory.setPort(5682);

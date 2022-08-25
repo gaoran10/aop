@@ -41,8 +41,8 @@ public class AutoDeleteTest extends AmqpTestBase{
 
     @Test()
     public void test() throws Exception {
-//        Connection connection = getConnection("vhost1", true);
-        Connection connection = new ConnectionFactory().newConnection();
+        Connection connection = getConnection("vhost1", true);
+//        Connection connection = new ConnectionFactory().newConnection();
         Channel channel = connection.createChannel();
         Connection connection2 = getConnection("vhost1", true);
         Channel channel2 = connection2.createChannel();
@@ -69,8 +69,8 @@ public class AutoDeleteTest extends AmqpTestBase{
         }
 
         System.out.println("connection isOpen: " + connection.isOpen());
-//        connection = getConnection("vhost1", true);
-        connection = new ConnectionFactory().newConnection();
+        connection = getConnection("vhost1", true);
+//        connection = new ConnectionFactory().newConnection();
         channel = connection.createChannel();
         System.out.println("declare queue again");
         channel.queueDeclare(qu, true, true, true, null);
