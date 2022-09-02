@@ -120,6 +120,11 @@ public class PersistentQueue extends AbstractAmqpQueue {
     public CompletableFuture<Entry> readEntryAsync(String exchangeName, long ledgerId, long entryId) {
         queueMetrics.readInc();
 //        Histogram.Timer readTimer = queueMetrics.startRead();
+        AmqpMessageRouter router = getRouter(exchangeName);
+        if (router == null) {
+            return FutureUtil.failedFuture(new RuntimeException(
+                    String.format("Failed to get router between exchange %s and queue %s", exchangeName, queueName)));
+        }
         return getRouter(exchangeName).getExchange().readEntryAsync(getName(), ledgerId, entryId)
                 .whenComplete((__, t) -> {
             if (t != null) {

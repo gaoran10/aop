@@ -89,6 +89,7 @@ public class QueueServiceImpl implements QueueService {
                     "[QueueDelete] The queue name is empty.", true, false));
         }
         CompletableFuture<Void> future = new CompletableFuture<>();
+        log.info("start to delete queue {} in vhost {}", queue, namespaceName);
         getQueue(namespaceName, queue, false, connectionId)
                 .whenComplete((amqpQueue, throwable) -> {
             if (throwable != null) {
@@ -119,8 +120,8 @@ public class QueueServiceImpl implements QueueService {
                             amqpQueue.unbindExchange(router.getExchange());
                         }
                     }
+                    queueContainer.deleteQueue(namespaceName, amqpQueue.getName());
                     amqpQueue.getTopic().deleteForcefully().thenAccept(__ -> {
-                        queueContainer.deleteQueue(namespaceName, amqpQueue.getName());
                         future.complete(null);
                     }).exceptionally(t -> {
                         log.error("Failed to delete topic for queue {} in vhost {}",

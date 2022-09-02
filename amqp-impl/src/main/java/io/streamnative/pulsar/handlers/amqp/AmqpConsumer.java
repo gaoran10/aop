@@ -115,7 +115,7 @@ public class AmqpConsumer extends Consumer {
         ChannelPromise writePromise = this.channel.getConnection().getCtx().newPromise();
         if (entries.isEmpty() || totalMessages == 0) {
             if (log.isDebugEnabled()) {
-                log.debug("[{}-{}] List of messages is empty, triggering write future immediately for consumerId {}",
+                log.debug("[{}]({}) List of messages is empty, triggering write future immediately for consumerId {}",
                         queueName, consumerTag, consumerId());
             }
             writePromise.setSuccess(null);
@@ -156,7 +156,7 @@ public class AmqpConsumer extends Consumer {
         try {
             indexMessage = MessageConvertUtils.entryToIndexMessage(index);
         } catch (Exception e) {
-            log.error("[{}-{}] Failed to get index data.", queueName, consumerTag, e);
+            log.error("[{}]({}) Failed to get index data.", queueName, consumerTag, e);
             sendFuture.completeExceptionally(e);
             return sendFuture;
         }
@@ -183,7 +183,7 @@ public class AmqpConsumer extends Consumer {
                                     AMQShortString.createAMQShortString(consumerTag));
                             sendFuture.complete(null);
                         } catch (Exception e) {
-                            log.error("[{}-{}] Failed to send message to consumer.", queueName, consumerTag, e);
+                            log.error("[{}]({}) Failed to send message to consumer.", queueName, consumerTag, e);
                             sendFuture.completeExceptionally(e);
                             return;
                         } finally {
@@ -198,7 +198,7 @@ public class AmqpConsumer extends Consumer {
                         indexMessage.recycle();
                     }
                 })).exceptionally(throwable -> {
-                    log.error("[{}-{}] Failed to read data from exchange topic {}.",
+                    log.error("[{}]({}) Failed to read data from exchange topic {}.",
                             queueName, consumerTag, indexMessage.getExchangeName(), throwable);
                     sendFuture.completeExceptionally(throwable);
                     return null;
@@ -318,7 +318,6 @@ public class AmqpConsumer extends Consumer {
         queueService.queueDelete(channel.getConnection().getNamespaceName(), queueName,
                 false, false, channel.getConnection().getConnectionId()).thenAccept(__ -> {
             log.info("Success to delete queue topic {} due to {}.", queueName, reason);
-            queueContainer.deleteQueue(channel.getConnection().getNamespaceName(), queueName);
         }).exceptionally(t -> {
             log.error("Failed to delete queue topic {} when check {}.", queueName, reason, t);
             return null;

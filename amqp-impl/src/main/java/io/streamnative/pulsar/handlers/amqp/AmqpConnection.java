@@ -172,7 +172,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
             brokerDecoder.decodeBuffer(QpidByteBuffer.wrap(buffer.nioBuffer()));
             receivedCompleteAllChannels();
         } catch (Throwable e) {
-            log.error("error while handle command:", e);
+            log.error("[{}] Error while handle command:", remoteAddress, e);
             close();
         } finally {
             // the amqpRequest has already held the reference.
@@ -537,7 +537,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
         if (channelMethodProcessor == null) {
             channelMethodProcessor = (ExtensionServerChannelMethodProcessor) Proxy.newProxyInstance(
                     AmqpProtocolHandler.class.getClassLoader(),
-                new Class[] {ServerChannelMethodProcessor.class}, new InvocationHandler() {
+                new Class[] {ExtensionServerChannelMethodProcessor.class}, new InvocationHandler() {
                     @Override
                     public Object invoke(final Object proxy, final Method method, final Object[] args)
                         throws Throwable {

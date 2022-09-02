@@ -328,8 +328,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                         MethodRegistry methodRegistry = connection.getMethodRegistry();
                         QueueDeleteOkBody responseBody = methodRegistry.createQueueDeleteOkBody(1);
                         connection.writeAndFlushFrame(responseBody.generateFrame(channelId));
-                        System.out.println("xxxx send delete ok command " + queue);
                     }
+                    log.info("Success delete queue {} in vhost {}", queue, connection.getNamespaceName());
                 })
                 .exceptionally(t -> {
                     String msg = String.format("Failed to delete queue %s in vhost %s",

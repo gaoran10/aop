@@ -114,7 +114,9 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
             cnx.read();
         } else {
             log.warn("Error in writing to inbound channel. Closing", future.cause());
-            proxyHandler.getBrokerChannel().close();
+            if (proxyHandler.getOutBoundChannelFuture().channel() != null) {
+                proxyHandler.getOutBoundChannelFuture().channel().close();
+            }
         }
     }
 
@@ -145,7 +147,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
 //                    log.debug("ProxyConnection [channelRead] - RedirectToBroker");
 //                }
                 if (proxyHandler != null) {
-                    proxyHandler.getBrokerChannel().writeAndFlush(msg);
+                    proxyHandler.getOutBoundChannelFuture().channel().writeAndFlush(msg);
                 }
                 break;
             case Closed:
@@ -373,7 +375,6 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
     }
 
     public void close() {
-        log.info("ProxyConnection close.");
 //        if (log.isDebugEnabled()) {
 //            log.debug("ProxyConnection close.");
 //        }
@@ -383,6 +384,9 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         }
         if (cnx != null) {
             cnx.close();
+            log.info("[L{}-R{}] proxy connection close.", cnx.channel().localAddress(), cnx.channel().remoteAddress());
+        } else {
+            log.info(" proxy connection close.");
         }
         state = State.Closed;
     }

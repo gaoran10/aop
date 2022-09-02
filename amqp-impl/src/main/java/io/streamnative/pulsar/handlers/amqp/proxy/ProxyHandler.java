@@ -53,7 +53,7 @@ public class ProxyHandler {
     private ProxyConnection proxyConnection;
     private Channel clientChannel;
     @Getter
-    private Channel brokerChannel;
+    private ChannelFuture outBoundChannelFuture;
     private State state;
     private List<Object> connectMsgList;
 
@@ -77,17 +77,17 @@ public class ProxyHandler {
                         ch.pipeline().addLast("processor", new ProxyBackendHandler(responseBody));
                     }
                 });
-        ChannelFuture channelFuture = bootstrap.connect(amqpBrokerHost, amqpBrokerPort);
-        brokerChannel = channelFuture.channel();
-        channelFuture.addListener(future -> {
+        outBoundChannelFuture = bootstrap.connect(amqpBrokerHost, amqpBrokerPort);
+//        outBoundChannelFuture = channelFuture.channel();
+        outBoundChannelFuture.addListener(future -> {
             if (!future.isSuccess()) {
                 // Close the connection if the connection attempt has failed.
+                log.error("[{}] Failed to connect to {}:{}", clientChannel, amqpBrokerHost, amqpBrokerPort);
                 clientChannel.close();
             }
         });
         state = State.Init;
-        log.info("Broker channel connect. vhost: {}, broker: {}:{}, isOpen: {}",
-                vhost, amqpBrokerHost, amqpBrokerPort, brokerChannel.isOpen());
+        log.info("Broker channel connect. vhost: {}, broker: {}:{}", vhost, amqpBrokerHost, amqpBrokerPort);
     }
 
     private class ProxyBackendHandler extends ChannelInboundHandlerAdapter implements
@@ -107,10 +107,10 @@ public class ProxyHandler {
             // This is invoked when the write operation on the paired connection
             // is completed
             if (future.isSuccess()) {
-                brokerChannel.read();
+                outBoundChannelFuture.channel().read();
             } else {
                 log.warn("[{}] [{}] Failed to write on proxy connection. Closing both connections.", clientChannel,
-                        brokerChannel, future.cause());
+                        outBoundChannelFuture.channel(), future.cause());
                 clientChannel.close();
             }
 
@@ -118,12 +118,19 @@ public class ProxyHandler {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            log.info("[{}] ProxyBackendHandler [channelActive]", vhost);
+            log.info("[L{}-R{}] proxy handler channelActive for vhost {}",
+                    ctx.channel().localAddress(), ctx.channel().remoteAddress(), vhost);
             this.cnx = ctx;
             super.channelActive(ctx);
+            Channel outBoundChannel = ctx.channel();
+            if (outBoundChannel == null) {
+                log.error("[{}] The outbound channel is null.", clientChannel);
+                clientChannel.close();
+                return;
+            }
             for (Object msg : connectMsgList) {
                 ((ByteBuf) msg).retain();
-                brokerChannel.writeAndFlush(msg).addListener(future -> brokerChannel.read());
+                outBoundChannel.writeAndFlush(msg).addListener(future -> outBoundChannel.read());
             }
         }
 
@@ -161,7 +168,6 @@ public class ProxyHandler {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            cause.printStackTrace();
             log.error("[" + vhost + "] ProxyBackendHandler [exceptionCaught] - msg: " + cause.getMessage(), cause);
             state = State.Failed;
         }
@@ -170,7 +176,7 @@ public class ProxyHandler {
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             log.info("[{}] ProxyBackendHandler [channelInactive]", vhost);
             super.channelInactive(ctx);
-            proxyConnection.close();
+            proxyConnection.getCnx().close();
         }
 
         @Override
@@ -278,7 +284,9 @@ public class ProxyHandler {
 
     public void close() {
         state = State.Closed;
-        this.brokerChannel.close();
+        if (this.outBoundChannelFuture.channel() != null) {
+            this.outBoundChannelFuture.channel().close();
+        }
     }
 
     enum State {
