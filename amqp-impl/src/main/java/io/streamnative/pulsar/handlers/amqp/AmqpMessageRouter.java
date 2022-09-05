@@ -144,6 +144,8 @@ public interface AmqpMessageRouter {
     CompletableFuture<Void> routingMessage(long ledgerId, long entryId, String routingKey,
                                            Map<String, Object> properties);
 
+    CompletableFuture<Void> routingMessageToQueue(ByteBuf payload, String routingKey, List<KeyValue> messageKeyValues, Map<String, Object> properties);
+
     CompletableFuture<Void> routingMessageToEx(ByteBuf payload, String routingKey, List<KeyValue> messageKeyValues, Map<String, Object> properties);
 
 }

@@ -18,6 +18,7 @@ import static org.apache.curator.shaded.com.google.common.base.Preconditions.che
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.buffer.ByteBuf;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpQueue;
 import io.streamnative.pulsar.handlers.amqp.AmqpEntryWriter;
@@ -49,7 +50,9 @@ import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
+import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.impl.MessageImpl;
+import org.apache.pulsar.common.api.proto.KeyValue;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
 import org.apache.pulsar.common.naming.TopicName;
@@ -87,8 +90,10 @@ public class PersistentQueue extends AbstractAmqpQueue {
         this.jsonMapper = new ObjectMapper();
         this.amqpEntryWriter = new AmqpEntryWriter(indexTopic);
         this.queueMetrics = queueMetrics;
-        this.indexTopic.getBrokerService().getPulsar().getExecutor()
-                .schedule(this::exchangeClear, 5, TimeUnit.SECONDS);
+
+        // TODO don't need cleanup exchange topic if write original message to queue
+//        this.indexTopic.getBrokerService().getPulsar().getExecutor()
+//                .schedule(this::exchangeClear, 5, TimeUnit.SECONDS);
     }
 
     @Override
@@ -114,6 +119,14 @@ public class PersistentQueue extends AbstractAmqpQueue {
             queueMetrics.writeFailed();
             return FutureUtil.failedFuture(e);
         }
+    }
+
+    @Override
+    public CompletableFuture<Void> writeMessageAsync(ByteBuf payload, List<KeyValue> messageKeyValues) {
+        queueMetrics.writeInc();
+        return amqpEntryWriter.publishMessage(MessageConvertUtils.entryToMessage(
+                payload, messageKeyValues, true))
+                .thenApply(__ -> null);
     }
 
     @Override

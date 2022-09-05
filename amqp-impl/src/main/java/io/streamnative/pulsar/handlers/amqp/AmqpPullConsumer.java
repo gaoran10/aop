@@ -25,7 +25,7 @@ import org.apache.pulsar.common.api.proto.KeySharedMeta;
  * Amqp consumer Used to return pull messages.
  */
 @Slf4j
-public class AmqpPullConsumer extends AmqpConsumer {
+public class AmqpPullConsumer extends AmqpConsumerOriginal {
 
     public AmqpPullConsumer(QueueContainer queueContainer, Subscription subscription,
         CommandSubscribe.SubType subType, String topicName, long consumerId, int priorityLevel,

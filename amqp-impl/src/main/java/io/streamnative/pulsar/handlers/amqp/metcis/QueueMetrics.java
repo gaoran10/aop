@@ -23,6 +23,8 @@ public interface QueueMetrics {
 
     void readInc();
 
+    void readInc(double count);
+
     void readFailed();
 
     Histogram.Timer startRead();
@@ -30,6 +32,8 @@ public interface QueueMetrics {
     void finishRead(Histogram.Timer timer);
 
     void ackInc();
+
+    void ackInc(double count);
 
 //    void collect();
 
@@ -113,6 +117,11 @@ public interface QueueMetrics {
             readCounter.labels(labelValues).inc();
         }
 
+        @Override
+        public void readInc(double count) {
+            readCounter.labels(labelValues).inc(count);
+        }
+
         public void readFailed() {
             readFailedCounter.labels(labelValues).inc();
         }
@@ -130,7 +139,12 @@ public interface QueueMetrics {
             ackCounter.labels(labelValues).inc();
         }
 
-//        public void collect() {
+        @Override
+        public void ackInc(double count) {
+            ackCounter.labels(labelValues).inc(count);
+        }
+
+        //        public void collect() {
 //            writeCounter.collect();
 ////            writeSuccessCounter.collect();
 //            writeFailedCounter.collect();
@@ -185,6 +199,11 @@ public interface QueueMetrics {
         }
 
         @Override
+        public void readInc(double count) {
+
+        }
+
+        @Override
         public void readFailed() {
 
         }
@@ -204,7 +223,12 @@ public interface QueueMetrics {
 
         }
 
-//        @Override
+        @Override
+        public void ackInc(double count) {
+
+        }
+
+        //        @Override
 //        public void collect() {
 //
 //        }

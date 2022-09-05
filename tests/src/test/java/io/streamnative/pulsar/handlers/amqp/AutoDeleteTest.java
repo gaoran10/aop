@@ -104,7 +104,7 @@ public class AutoDeleteTest extends AmqpTestBase{
         channel.basicConsume(qu, true, new DefaultConsumer(channel) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-                System.out.println("receive message ");
+                System.out.println("receive message " + new String(body));
                 messageSet.remove(new String(body));
             }
         });

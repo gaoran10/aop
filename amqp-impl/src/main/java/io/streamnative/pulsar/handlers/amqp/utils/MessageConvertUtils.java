@@ -165,10 +165,14 @@ public final class MessageConvertUtils {
         }
     }
 
-    public static MessageImpl<byte[]> entryToMessage(ByteBuf payload, List<KeyValue> keyValues) {
-        TypedMessageBuilderImpl<byte[]> builder = new TypedMessageBuilderImpl(null, Schema.BYTES);
+    public static MessageImpl<byte[]> entryToMessage(ByteBuf payload, List<KeyValue> keyValues, boolean setDeliveryTime) {
+        TypedMessageBuilderImpl<byte[]> builder = new TypedMessageBuilderImpl<>(null, Schema.BYTES);
         for (KeyValue kv : keyValues) {
             builder.property(kv.getKey(), kv.getValue());
+            if (kv.getKey().equals(PROP_X_DELAY) && setDeliveryTime) {
+                builder.deliverAfter(Long.parseLong(kv.getValue()), TimeUnit.MILLISECONDS);
+                System.out.println("send message to queue with delay " + Long.parseLong(kv.getValue()) / 1000);
+            }
         }
         byte[] array = new byte[payload.readableBytes()];
         payload.getBytes(payload.readerIndex(), array);

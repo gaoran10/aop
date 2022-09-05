@@ -220,7 +220,7 @@ public class RabbitMQMessagingTest extends AmqpTestBase {
         }
     }
 
-    @Test(timeOut = 1000 * 5)
+//    @Test(timeOut = 1000 * 5)
     private void persistentExchangeAndQueueWriteTest() throws IOException, TimeoutException {
         final String vhost = "vhost1";
         final String exchangeName = randExName();

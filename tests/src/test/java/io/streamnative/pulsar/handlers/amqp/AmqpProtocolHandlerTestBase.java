@@ -393,9 +393,9 @@ public abstract class AmqpProtocolHandlerTestBase {
     }
 
     public void checkPulsarServiceState() {
-        for (PulsarService pulsarService : pulsarServiceList) {
-            doReturn(PulsarService.State.Started).when(pulsarService).getState();
-        }
+//        for (PulsarService pulsarService : pulsarServiceList) {
+//            doReturn(PulsarService.State.Started).when(pulsarService).getState();
+//        }
     }
 
     /**

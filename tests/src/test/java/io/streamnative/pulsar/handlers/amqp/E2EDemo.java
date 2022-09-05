@@ -82,7 +82,7 @@ public class E2EDemo {
         keyList.add("a.b.prediction.deviceprint");
         keyList.add("x.y.prediction.fraud_risk_grouper");
         keyList.add("FinalizingQueue");
-        for (int i = 0; i < 2000; i++) {
+        for (int i = 0; i < 100; i++) {
             String key = "key-" + i;
             keyList.add(key);
             bindAndConsume(key, Lists.newArrayList(Pair.of(predicationInput, key + ".*")));
@@ -119,7 +119,7 @@ public class E2EDemo {
 //        });
         bindAndConsume("FinalizingQueue", Lists.newArrayList(Pair.of(finalizingInput, "")));
 
-        RateLimiter rateLimiter = RateLimiter.create(1000);
+        RateLimiter rateLimiter = RateLimiter.create(10000);
         long messageIndex = 0;
         while (true) {
             rateLimiter.acquire();

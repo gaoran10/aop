@@ -13,6 +13,7 @@
  */
 package io.streamnative.pulsar.handlers.amqp.impl;
 
+import io.netty.buffer.ByteBuf;
 import io.streamnative.pulsar.handlers.amqp.AbstractAmqpQueue;
 import java.util.LinkedList;
 import java.util.List;
@@ -22,6 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.service.Topic;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.common.api.proto.KeyValue;
 
 /**
  * In memory implementation for AMQP queue.
@@ -71,4 +74,10 @@ public class InMemoryQueue extends AbstractAmqpQueue {
     public Topic getTopic() {
         return null;
     }
+
+    @Override
+    public CompletableFuture<Void> writeMessageAsync(ByteBuf payload, List<KeyValue> messageKeyValues) {
+        return null;
+    }
+
 }

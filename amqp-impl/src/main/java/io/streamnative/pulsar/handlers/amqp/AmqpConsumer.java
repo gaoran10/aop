@@ -16,6 +16,7 @@ package io.streamnative.pulsar.handlers.amqp;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.concurrent.Future;
+import io.streamnative.pulsar.handlers.amqp.impl.PersistentQueue;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -55,31 +56,31 @@ import org.apache.qpid.server.protocol.v0_8.AMQShortString;
 @Slf4j
 public class AmqpConsumer extends Consumer {
 
-    private final AmqpChannel channel;
+    protected final AmqpChannel channel;
 
-    private QueueContainer queueContainer;
+    protected QueueContainer queueContainer;
 
-    private final boolean autoAck;
+    protected final boolean autoAck;
 
-    private final String consumerTag;
+    protected final String consumerTag;
 
     @Getter
-    private final String queueName;
+    protected final String queueName;
     /**
      * map(exchangeName,treeMap(indexPosition,msgPosition)) .
      */
-    private final Map<String, ConcurrentSkipListMap<PositionImpl, PositionImpl>> unAckMessages;
-    private static final AtomicIntegerFieldUpdater<AmqpConsumer> MESSAGE_PERMITS_UPDATER =
+    protected final Map<String, ConcurrentSkipListMap<PositionImpl, PositionImpl>> unAckMessages;
+    protected static final AtomicIntegerFieldUpdater<AmqpConsumer> MESSAGE_PERMITS_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AmqpConsumer.class, "availablePermits");
-    private volatile int availablePermits;
+    protected volatile int availablePermits;
 
-    private static final AtomicIntegerFieldUpdater<AmqpConsumer> ADD_PERMITS_UPDATER =
+    protected static final AtomicIntegerFieldUpdater<AmqpConsumer> ADD_PERMITS_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AmqpConsumer.class, "addPermits");
-    private volatile int addPermits = 0;
+    protected volatile int addPermits = 0;
 
-    private final int maxPermits = 1000;
+    protected final int maxPermits = 1000;
 
-    private QueueService queueService;
+    protected QueueService queueService;
 
     public AmqpConsumer(QueueContainer queueContainer, Subscription subscription,
         CommandSubscribe.SubType subType, String topicName, long consumerId,
@@ -211,6 +212,9 @@ public class AmqpConsumer extends Consumer {
 //        ManagedCursor cursor = ((PersistentSubscription) getSubscription()).getCursor();
 //        Position previousMarkDeletePosition = cursor.getMarkDeletedPosition();
         getSubscription().acknowledgeMessage(position, CommandAck.AckType.Individual, Collections.EMPTY_MAP);
+        asyncGetQueue().thenAccept(amqpQueue -> {
+            ((PersistentQueue) amqpQueue).getQueueMetrics().ackInc(position.size());
+        });
 //        if (!cursor.getMarkDeletedPosition().equals(previousMarkDeletePosition)) {
 //            asyncGetQueue().whenComplete((amqpQueue, throwable) -> {
 //                if (throwable != null) {

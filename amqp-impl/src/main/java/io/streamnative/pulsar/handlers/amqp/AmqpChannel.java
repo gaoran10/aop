@@ -449,7 +449,8 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
         subscriptionFuture.thenAccept(subscription -> {
             AmqpConsumer consumer;
             try {
-                consumer = new AmqpConsumer(queueContainer, subscription, exclusive
+                // TODO use the new amqp consumer
+                consumer = new AmqpConsumerOriginal(queueContainer, subscription, exclusive
                         ? CommandSubscribe.SubType.Exclusive :
                         CommandSubscribe.SubType.Shared, topic.getName(), CONSUMER_ID.incrementAndGet(), 0,
                         consumerTag, true, connection.getServerCnx(), "", null,
