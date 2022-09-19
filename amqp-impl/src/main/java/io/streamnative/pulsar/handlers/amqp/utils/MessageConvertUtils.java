@@ -171,7 +171,6 @@ public final class MessageConvertUtils {
             builder.property(kv.getKey(), kv.getValue());
             if (kv.getKey().equals(PROP_X_DELAY) && setDeliveryTime) {
                 builder.deliverAfter(Long.parseLong(kv.getValue()), TimeUnit.MILLISECONDS);
-                System.out.println("send message to queue with delay " + Long.parseLong(kv.getValue()) / 1000);
             }
         }
         byte[] array = new byte[payload.readableBytes()];
