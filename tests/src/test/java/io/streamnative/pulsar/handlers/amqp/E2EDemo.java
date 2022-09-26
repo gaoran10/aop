@@ -46,10 +46,8 @@ public class E2EDemo {
     }
 
     public void pinTest() throws Exception {
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setPort(5682);
         @Cleanup
-        Connection connection = factory.newConnection();
+        Connection connection = getConnection();
         @Cleanup
         Channel channel = connection.createChannel();
         String predicationInput, predicationInputHeaders, verificationInput, analyticsInput, finalizingInput;
@@ -82,41 +80,16 @@ public class E2EDemo {
         keyList.add("a.b.prediction.deviceprint");
         keyList.add("x.y.prediction.fraud_risk_grouper");
         keyList.add("FinalizingQueue");
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             String key = "key-" + i;
             keyList.add(key);
             bindAndConsume(key, Lists.newArrayList(Pair.of(predicationInput, key + ".*")));
         }
 
-//        String authPolicyWorker = "AuthPolicyWorker";
-//        channel.queueDeclare(authPolicyWorker, true, false, false, null);
-//        channel.queueBind(authPolicyWorker, verificationInput, "*.*.prediction.deviceprint");
-//        channel.queueBind(authPolicyWorker, analyticsInput, "*.*.prediction.fraud_risk_grouper");
-//        AtomicLong receiveMsgCount1 = new AtomicLong();
-//        channel.basicConsume(authPolicyWorker, true, new DefaultConsumer(channel) {
-//            @Override
-//            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-//                if (receiveMsgCount1.incrementAndGet() % 1000 == 0) {
-//                    System.out.println("[" + authPolicyWorker + "] receive msg: " + new String(body));
-//                }
-//            }
-//        });
         bindAndConsume("AuthPolicyWorker", Lists.newArrayList(
                 Pair.of(verificationInput, "*.*.prediction.deviceprint"),
                 Pair.of(analyticsInput, "*.*.prediction.fraud_risk_grouper")));
 
-//        String finalizingQueue = "FinalizingQueue";
-//        channel.queueDeclare(finalizingQueue, true, false, false, null);
-//        channel.queueBind(finalizingQueue, finalizingInput, "");
-//        AtomicLong receiveMsgCount2 = new AtomicLong();
-//        channel.basicConsume(finalizingQueue, true, new DefaultConsumer(channel) {
-//            @Override
-//            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
-//                if (receiveMsgCount2.incrementAndGet() % 1000 == 0) {
-//                    System.out.println("[" + finalizingQueue + "] receive msg: " + new String(body));
-//                }
-//            }
-//        });
         bindAndConsume("FinalizingQueue", Lists.newArrayList(Pair.of(finalizingInput, "")));
 
         RateLimiter rateLimiter = RateLimiter.create(10000);
@@ -162,9 +135,7 @@ public class E2EDemo {
     }
 
     private void bindAndConsume(String queue, List<Pair<String, String>> bindings) throws Exception {
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setPort(5682);
-        Connection connection = factory.newConnection();
+        Connection connection = getConnection();
         Channel channel = connection.createChannel();
 
         channel.queueDeclare(queue, true, false, true, null);
@@ -183,6 +154,14 @@ public class E2EDemo {
             }
         });
         System.out.println("bind and consume " + queue);
+    }
+
+    public Connection getConnection() throws Exception {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+        factory.setPort(5682);
+        factory.setConnectionTimeout(1000 * 60);
+        return factory.newConnection();
     }
 
 }

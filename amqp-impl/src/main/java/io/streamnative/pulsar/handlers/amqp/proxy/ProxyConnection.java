@@ -235,21 +235,20 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         }
         vhost = virtualHostStr;
 
-        proxyService.getVhostConnectionMap().compute(vhost, (v, set) -> {
-            if (set == null) {
-                Set<ProxyConnection> proxyConnectionSet =  Sets.newConcurrentHashSet();
-                proxyConnectionSet.add(this);
-                return proxyConnectionSet;
-            } else {
-                set.add(this);
-                return set;
-            }
-        });
+//        proxyService.getVhostConnectionMap().compute(vhost, (v, set) -> {
+//            if (set == null) {
+//                Set<ProxyConnection> proxyConnectionSet =  Sets.newConcurrentHashSet();
+//                proxyConnectionSet.add(this);
+//                return proxyConnectionSet;
+//            } else {
+//                set.add(this);
+//                return set;
+//            }
+//        });
         handleConnect(new AtomicInteger(5));
     }
 
     public void handleConnect(AtomicInteger retryTimes) {
-//        log.info("handle connect residue retryTimes: {}", retryTimes);
         if (retryTimes.get() == 0) {
             log.warn("Handle connect retryTimes is 0.");
             close();
@@ -274,7 +273,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
             });
         } catch (Exception e) {
             log.error("Lookup broker failed.", e);
-            resetProxyHandler();
+            closeProxyHandler();
             close();
         }
     }
@@ -292,7 +291,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
 //            log.info("Handle connect complete. aopBrokerHost: {}, aopBrokerPort: {}", aopBrokerHost, aopBrokerPort);
         } catch (Exception e) {
             retryTimes.decrementAndGet();
-            resetProxyHandler();
+            closeProxyHandler();
             String errorMSg = String.format("Lookup broker failed. aopBrokerHost: %S, aopBrokerPort: %S",
                     aopBrokerHost, aopBrokerPort);
             log.error(errorMSg, e);
@@ -300,7 +299,7 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
         }
     }
 
-    public void resetProxyHandler() {
+    public void closeProxyHandler() {
         if (proxyHandler != null) {
             proxyHandler.close();
             proxyHandler = null;
@@ -375,18 +374,14 @@ public class ProxyConnection extends ChannelInboundHandlerAdapter implements
     }
 
     public void close() {
-//        if (log.isDebugEnabled()) {
-//            log.debug("ProxyConnection close.");
-//        }
+        log.info("[{}] proxy connection close", cnx != null ? cnx.channel() : null);
 
         if (proxyHandler != null) {
-            resetProxyHandler();
+            closeProxyHandler();
         }
         if (cnx != null) {
+            cnx.channel().close();
             cnx.close();
-            log.info("[L{}-R{}] proxy connection close.", cnx.channel().localAddress(), cnx.channel().remoteAddress());
-        } else {
-            log.info(" proxy connection close.");
         }
         state = State.Closed;
     }

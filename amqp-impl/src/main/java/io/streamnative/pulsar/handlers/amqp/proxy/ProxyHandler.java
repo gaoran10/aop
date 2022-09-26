@@ -26,7 +26,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
-import io.netty.util.concurrent.GenericFutureListener;
 import io.streamnative.pulsar.handlers.amqp.AmqpClientDecoder;
 import io.streamnative.pulsar.handlers.amqp.AmqpEncoder;
 import java.util.List;
@@ -168,15 +167,17 @@ public class ProxyHandler {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            log.error("[" + vhost + "] ProxyBackendHandler [exceptionCaught] - msg: " + cause.getMessage(), cause);
+            log.error("[{} {}] proxy backend handler exception caught for vhost {}",
+                    clientChannel, outBoundChannelFuture != null ? outBoundChannelFuture.channel() : null,
+                    vhost, cause);
             state = State.Failed;
         }
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            log.info("[{}] ProxyBackendHandler [channelInactive]", vhost);
-            super.channelInactive(ctx);
-            proxyConnection.getCnx().close();
+            log.info("[{} {}] proxy backend handler channel inactive for vhost {}",
+                    clientChannel, outBoundChannelFuture != null ? outBoundChannelFuture.channel() : null, vhost);
+            proxyConnection.getCnx().channel().close();
         }
 
         @Override

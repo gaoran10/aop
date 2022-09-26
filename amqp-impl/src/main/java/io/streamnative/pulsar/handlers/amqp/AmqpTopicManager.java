@@ -84,6 +84,7 @@ public class AmqpTopicManager {
 
                     AbstractTopic persistentTopic = (AbstractTopic) topicOp.get();
                     if (checkTopicIsFenced(persistentTopic, topicCompletableFuture)) {
+                        persistentTopic.close(false);
                         return;
                     }
 
