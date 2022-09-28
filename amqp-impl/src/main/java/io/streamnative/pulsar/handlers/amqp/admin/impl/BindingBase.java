@@ -107,7 +107,7 @@ public class BindingBase extends BaseResources {
                             bean.setSource(binding.getSource());
                             bean.setDestination(exchange);
                             bean.setRoutingKey(binding.getBindingKey());
-                            bean.setPropertiesKey(binding.getPropsKey());
+                            bean.setPropertiesKey(binding.propsKey());
                             bean.setDestinationType("exchange");
                             bean.setArguments(router.getArguments());
                             beanList.add(bean);
@@ -223,7 +223,7 @@ public class BindingBase extends BaseResources {
                         return;
                     }
                     for (AmqpBinding binding : router.getBindings().values()) {
-                        if (propsKey != null && !propsKey.equals(binding.getPropsKey())) {
+                        if (propsKey != null && !propsKey.equals(binding.propsKey())) {
                             continue;
                         }
                         BindingBean bean = new BindingBean();
@@ -231,7 +231,7 @@ public class BindingBase extends BaseResources {
                         bean.setSource(source);
                         bean.setDestination(destination);
                         bean.setRoutingKey(binding.getBindingKey());
-                        bean.setPropertiesKey(binding.getPropsKey());
+                        bean.setPropertiesKey(binding.propsKey());
                         bean.setDestinationType("exchange");
                         beans.add(bean);
                     }

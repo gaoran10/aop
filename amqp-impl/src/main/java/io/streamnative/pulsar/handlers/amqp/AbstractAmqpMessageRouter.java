@@ -106,7 +106,7 @@ public abstract class AbstractAmqpMessageRouter implements AmqpMessageRouter {
 
     @Override
     public void addBinding(AmqpBinding binding) {
-        this.bindings.put(binding.getPropsKey(), binding);
+        this.bindings.put(binding.propsKey(), binding);
         this.haveChanges = true;
     }
 

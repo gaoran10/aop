@@ -47,7 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.common.util.JsonUtil;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
@@ -431,7 +431,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
                             TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
         }
         routerMap.computeIfPresent(sourceEx.getName(), (k, router) -> {
-            router.getBindings().remove(new AmqpBinding(sourceEx.getName(), routingKey, params).getPropsKey());
+            router.getBindings().remove(new AmqpBinding(sourceEx.getName(), routingKey, params).propsKey());
             return router;
         });
         updateExchangeProperties();

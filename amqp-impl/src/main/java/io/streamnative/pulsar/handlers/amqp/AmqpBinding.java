@@ -1,6 +1,7 @@
 package io.streamnative.pulsar.handlers.amqp;
 
 import java.util.Map;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,7 +15,7 @@ public class AmqpBinding {
     private String bindingKey;
     private Map<String, Object> params;
 
-    public String getPropsKey() {
+    public String propsKey() {
         if (params == null || params.isEmpty()) {
             return bindingKey;
         } else {
