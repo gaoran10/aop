@@ -23,7 +23,6 @@ import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -32,7 +31,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.broker.service.Subscription;
 import org.apache.pulsar.common.naming.NamespaceName;
-import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.qpid.server.protocol.ErrorCodes;
 import org.apache.qpid.server.protocol.v0_8.AMQShortString;
@@ -120,7 +118,7 @@ public class QueueServiceImpl implements QueueService {
                             amqpQueue.unbindExchange(router.getExchange());
                         }
                     }
-                    queueContainer.deleteQueue(namespaceName, amqpQueue.getName());
+                    queueContainer.removeQueue(namespaceName, amqpQueue.getName());
                     amqpQueue.getTopic().deleteForcefully().thenAccept(__ -> {
                         future.complete(null);
                     }).exceptionally(t -> {
@@ -215,7 +213,7 @@ public class QueueServiceImpl implements QueueService {
                         try {
                             amqpQueue.unbindExchange(amqpExchange);
                             if (amqpExchange.getAutoDelete() && (amqpExchange.getQueueSize() == 0)) {
-                                exchangeContainer.deleteExchange(namespaceName, exchangeName);
+                                exchangeContainer.removeExchange(namespaceName, exchangeName);
                                 amqpExchange.getTopic().deleteForcefully().thenAccept(__ -> {
                                     future.complete(null);
                                 }).exceptionally(t -> {

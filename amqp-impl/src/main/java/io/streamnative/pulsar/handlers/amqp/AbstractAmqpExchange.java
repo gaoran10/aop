@@ -14,6 +14,8 @@
 package io.streamnative.pulsar.handlers.amqp;
 
 import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
+import org.apache.pulsar.common.naming.NamespaceName;
+
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -26,22 +28,24 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class AbstractAmqpExchange implements AmqpExchange {
 
     protected final String exchangeName;
+    protected final NamespaceName namespaceName;
     protected final ExchangeType exchangeType;
-    protected Set<AmqpQueue> queues;
+    protected Set<String> queues;
     protected boolean durable;
     protected boolean autoDelete;
-    protected Map<String, Set<AmqpQueue>> bindingKeyQueueMap;
+    protected Map<String, Set<String>> bindingKeyQueueMap;
 
     public static final String DEFAULT_EXCHANGE_DURABLE = "aop.direct.durable";
 
-    protected Set<AmqpExchange> exchanges;
+    protected Set<String> exchanges;
     protected Map<String, Set<AmqpExchange>> bindingKeyExchangeMap;
     protected Map<String, AmqpMessageRouter> routerMap = new ConcurrentHashMap<>();
 
-    protected AbstractAmqpExchange(String exchangeName, ExchangeType exchangeType,
-                                   Set<AmqpQueue> queues, Set<AmqpExchange> exchanges,
+    protected AbstractAmqpExchange(String exchangeName, NamespaceName namespaceName, ExchangeType exchangeType,
+                                   Set<String> queues, Set<String> exchanges,
                                    boolean durable, boolean autoDelete) {
         this.exchangeName = exchangeName;
+        this.namespaceName = namespaceName;
         this.exchangeType = exchangeType;
         this.queues = queues;
         this.exchanges = exchanges;
@@ -55,7 +59,7 @@ public abstract class AbstractAmqpExchange implements AmqpExchange {
 
     @Override
     public CompletableFuture<Void> addQueue(AmqpQueue queue) {
-        queues.add(queue);
+        queues.add(queue.getName());
         return CompletableFuture.completedFuture(null);
     }
 
@@ -105,4 +109,10 @@ public abstract class AbstractAmqpExchange implements AmqpExchange {
     public int hashCode() {
         return Objects.hash(exchangeName);
     }
+
+    @Override
+    public boolean isUnavailable() {
+        return true;
+    }
+
 }

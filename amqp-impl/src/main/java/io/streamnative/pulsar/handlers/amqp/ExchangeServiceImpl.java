@@ -20,6 +20,7 @@ import static io.streamnative.pulsar.handlers.amqp.utils.ExchangeUtil.isBuildInE
 import static io.streamnative.pulsar.handlers.amqp.utils.ExchangeUtil.isDefaultExchange;
 
 import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
+import io.streamnative.pulsar.handlers.amqp.common.exception.ExchangeUnavailableException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -85,6 +86,11 @@ public class ExchangeServiceImpl implements ExchangeService {
                                         + " to " + exchangeType + ".", false, true));
                         return;
                     }
+                    if (ex.isUnavailable()) {
+                        future.completeExceptionally(
+                                new ExchangeUnavailableException(namespaceName.toString(), exchange));
+                        return;
+                    }
                     future.complete(ex);
         });
         return future;
@@ -125,7 +131,7 @@ public class ExchangeServiceImpl implements ExchangeService {
                 return;
             }
             topic.delete().thenAccept(__ -> {
-                exchangeContainer.deleteExchange(namespaceName, exchangeName);
+                exchangeContainer.removeExchange(namespaceName, exchangeName);
                 future.complete(null);
             }).exceptionally(t -> {
                 future.completeExceptionally(new AoPException(ErrorCodes.INTERNAL_ERROR,

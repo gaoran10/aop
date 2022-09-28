@@ -33,6 +33,8 @@ import io.streamnative.pulsar.handlers.amqp.AmqpExchangeReplicator;
 import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueue;
 import io.streamnative.pulsar.handlers.amqp.ExchangeContainer;
+import io.streamnative.pulsar.handlers.amqp.QueueContainer;
+import io.streamnative.pulsar.handlers.amqp.common.exception.ExchangeUnavailableException;
 import io.streamnative.pulsar.handlers.amqp.metcis.ExchangeMetrics;
 import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
@@ -85,14 +87,26 @@ public class PersistentExchange extends AbstractAmqpExchange {
     private AmqpExchangeReplicator messageReplicator;
     private AmqpEntryWriter amqpEntryWriter;
     private ExchangeMetrics exchangeMetrics;
+    private volatile boolean isFenced;
+    private volatile boolean isClosingOrDeleting;
+    private final ExchangeContainer exchangeContainer;
+    private final QueueContainer queueContainer;
 
-    public PersistentExchange(String exchangeName, ExchangeType type, PersistentTopic persistentTopic, boolean autoDelete,
+    public PersistentExchange(ExchangeContainer exchangeContainer,
+                              QueueContainer queueContainer,
+                              String exchangeName,
+                              NamespaceName namespaceName,
+                              ExchangeType type,
+                              PersistentTopic persistentTopic,
+                              boolean autoDelete,
                               ExchangeMetrics exchangeMetrics) {
-        super(exchangeName, type, Sets.newConcurrentHashSet(), Sets.newConcurrentHashSet(), true, autoDelete);
+        super(exchangeName, namespaceName, type, Sets.newConcurrentHashSet(), Sets.newConcurrentHashSet(), true, autoDelete);
+        this.exchangeContainer = exchangeContainer;
+        this.queueContainer = queueContainer;
         this.persistentTopic = persistentTopic;
         topicNameValidate();
-        updateExchangeProperties();
-        cursors = new ConcurrentOpenHashMap<>(16, 1);
+        cursors = ConcurrentOpenHashMap.<String, CompletableFuture<ManagedCursor>>newBuilder()
+                .expectedItems(16).concurrencyLevel(1).build();
         for (ManagedCursor cursor : persistentTopic.getManagedLedger().getCursors()) {
             cursors.put(cursor.getName(), CompletableFuture.completedFuture(cursor));
             log.info("PersistentExchange {} recover cursor {}", persistentTopic.getName(), cursor.toString());
@@ -119,23 +133,30 @@ public class PersistentExchange extends AbstractAmqpExchange {
                         Collection<CompletableFuture<Void>> routeFutureList = new ArrayList<>();
                         String bindingKey = props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString();
                         if (exchangeType == ExchangeType.DIRECT) {
-                            Set<AmqpQueue> queueSet = bindingKeyQueueMap.get(bindingKey);
+                            Set<String> queueSet = bindingKeyQueueMap.get(bindingKey);
                             if (queueSet != null) {
-                                for (AmqpQueue queue : queueSet) {
+                                for (String queue : queueSet) {
 //                                    routeFutureList.add(
 //                                            queue.writeIndexMessageAsync(exchangeName, position.getLedgerId(),
 //                                                    position.getEntryId(), props));
 
                                     // TODO write original message
-                                    routeFutureList.add(
-                                            queue.writeMessageAsync(data,
-                                                    message.getMessageBuilder().getPropertiesList()));
+                                    CompletableFuture<Void> routeFuture =
+                                            queueContainer.asyncGetQueue(namespaceName, queue, false)
+                                                    .thenCompose(amqpQueue ->
+                                                            amqpQueue.writeMessageAsync(
+                                                                    data,
+                                                                    message.getMessageBuilder().getPropertiesList()));
+                                    routeFutureList.add(routeFuture);
+//                                    routeFutureList.add(
+//                                            queue.writeMessageAsync(data,
+//                                                    message.getMessageBuilder().getPropertiesList()));
                                 }
                             }
                         } else {
                             int queueIndex = 0;
                             props.put("__queueCount", queues.size());
-                            for (AmqpQueue queue : queues) {
+                            for (String queue : queues) {
                                 queueIndex ++;
                                 props.put("__queueIndex", queueIndex);
 
@@ -146,29 +167,39 @@ public class PersistentExchange extends AbstractAmqpExchange {
 //                                        props);
 
                                 // TODO write original message
-                                CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessageToQueue(
-                                        data,
-                                        props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
-                                        message.getMessageBuilder().getPropertiesList(),
-                                        props
-                                );
+                                CompletableFuture<Void> routeFuture =
+                                        queueContainer.asyncGetQueue(namespaceName, queue, false)
+                                                .thenCompose(amqpQueue ->
+                                                        amqpQueue.getRouter(exchangeName).routingMessageToQueue(
+                                                                data,
+                                                                props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                                                message.getMessageBuilder().getPropertiesList(),
+                                                                props));
+
+//                                CompletableFuture<Void> routeFuture = queue.getRouter(exchangeName).routingMessageToQueue(
+//                                        data,
+//                                        props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+//                                        message.getMessageBuilder().getPropertiesList(),
+//                                        props
+//                                );
                                 routeFutureList.add(routeFuture);
                             }
                         }
 
-                        for (AmqpExchange exchange : exchanges) {
-                            if (props.getOrDefault(PROP_EXCHANGE, "").equals(exchange.getName())) {
+                        for (String exchange : exchanges) {
+                            if (props.getOrDefault(PROP_EXCHANGE, "").equals(exchange)) {
                                 // indicate this message is from the destination exchange
                                 // don't need to route, avoid dead loop
                                 continue;
                             }
-                            props.put(PROP_EXCHANGE, exchange.getName());
-                            CompletableFuture<Void> routeFuture = exchange.getRouter(exchangeName).routingMessageToEx(
-                                    data,
-                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
-                                    message.getMessageBuilder().getPropertiesList(),
-                                    props
-                            );
+                            props.put(PROP_EXCHANGE, exchange);
+                            CompletableFuture<Void> routeFuture =
+                                    exchangeContainer.asyncGetExchange(namespaceName, exchange, false, null, false)
+                                            .thenCompose(amqpExchange -> amqpExchange.getRouter(exchangeName).routingMessageToEx(
+                                                    data,
+                                                    props.getOrDefault(MessageConvertUtils.PROP_ROUTING_KEY, "").toString(),
+                                                    message.getMessageBuilder().getPropertiesList(),
+                                                    props));
                             routeFutureList.add(routeFuture);
                         }
 
@@ -198,6 +229,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
         return amqpEntryWriter.publishMessage(message).whenComplete((__, t) -> {
             if (t != null) {
                 exchangeMetrics.writeFailed();
+                if (FutureUtil.unwrapCompletionException(t)
+                        instanceof ManagedLedgerException.ManagedLedgerFencedException) {
+                    isFenced = true;
+                    close();
+                }
                 return;
             }
 //            exchangeMetrics.writeSuccessInc();
@@ -207,11 +243,21 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Entry> readEntryAsync(String queueName, long ledgerId, long entryId) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         return readEntryAsync(queueName, PositionImpl.get(ledgerId, entryId));
     }
 
     @Override
     public CompletableFuture<Entry> readEntryAsync(String queueName, Position position) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         exchangeMetrics.readInc();
         CompletableFuture<Entry> future = new CompletableFuture<>();
         // TODO Temporarily put the creation operation here, and later put the operation in router
@@ -243,11 +289,21 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> markDeleteAsync(String queueName, long ledgerId, long entryId) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         return markDeleteAsync(queueName, PositionImpl.get(ledgerId, entryId));
     }
 
     @Override
     public CompletableFuture<Void> markDeleteAsync(String queueName, Position position) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         exchangeMetrics.ackInc();
         CompletableFuture<Void> future = new CompletableFuture<>();
         CompletableFuture<ManagedCursor> cursorFuture = cursors.get(queueName);
@@ -286,6 +342,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Position> getMarkDeleteAsync(String queueName) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         CompletableFuture<ManagedCursor> cursorFuture = cursors.get(queueName);
         return cursorFuture.thenApply(cursor -> {
             if (cursor == null) {
@@ -298,16 +359,20 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> addQueue(AmqpQueue queue) {
-        queues.add(queue);
+        if (this.isUnavailable()) {
+            throw new ExchangeUnavailableException(
+                    TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName);
+        }
+        queues.add(queue.getName());
         if (exchangeType == ExchangeType.DIRECT) {
             for (String bindingKey : queue.getRouter(exchangeName).getBindingKey()) {
                 bindingKeyQueueMap.compute(bindingKey, (k, v) -> {
                     if (v == null) {
-                        Set<AmqpQueue> set = new HashSet<>();
-                        set.add(queue);
+                        Set<String> set = new HashSet<>();
+                        set.add(queue.getName());
                         return set;
                     } else {
-                        v.add(queue);
+                        v.add(queue.getName());
                         return v;
                     }
                 });
@@ -322,10 +387,14 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public void removeQueue(AmqpQueue queue) {
-        queues.remove(queue);
+        if (this.isUnavailable()) {
+            throw new ExchangeUnavailableException(
+                    TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName);
+        }
+        queues.remove(queue.getName());
         if (bindingKeyQueueMap != null) {
-            for (Set<AmqpQueue> queueSet : bindingKeyQueueMap.values()) {
-                queueSet.remove(queue);
+            for (Set<String> queueSet : bindingKeyQueueMap.values()) {
+                queueSet.remove(queue.getName());
             }
         }
         updateExchangeProperties();
@@ -334,6 +403,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> bindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         routerMap.compute(sourceEx.getName(), (k, router) -> {
             if (router == null) {
                 router = AbstractAmqpMessageRouter.generateRouter(sourceEx.getType());
@@ -351,6 +425,11 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> unbindExchange(AmqpExchange sourceEx, String routingKey, Map<String, Object> params) {
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
         routerMap.computeIfPresent(sourceEx.getName(), (k, router) -> {
             router.getBindings().remove(new AmqpBinding(sourceEx.getName(), routingKey, params).getPropsKey());
             return router;
@@ -362,7 +441,12 @@ public class PersistentExchange extends AbstractAmqpExchange {
 
     @Override
     public CompletableFuture<Void> addExchange(AmqpExchange destinationEx, String routingKey, Map<String, Object> params) {
-        exchanges.add(destinationEx);
+        if (this.isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new ExchangeUnavailableException(
+                            TopicName.get(this.persistentTopic.getName()).getNamespace(), exchangeName));
+        }
+        exchanges.add(destinationEx.getName());
         if (exchangeType == ExchangeType.DIRECT) {
             bindingKeyExchangeMap.compute(routingKey, (k, v) -> {
                 if (v == null) {
@@ -372,6 +456,9 @@ public class PersistentExchange extends AbstractAmqpExchange {
                 return v;
             });
         }
+
+        updateExchangeProperties();
+
         return CompletableFuture.completedFuture(null);
     }
 
@@ -433,15 +520,16 @@ public class PersistentExchange extends AbstractAmqpExchange {
     }
 
     private List<String> getQueueNames() {
-        List<String> queueNames = new ArrayList<>();
-        for (AmqpQueue queue : queues) {
-            queueNames.add(queue.getName());
-        }
-        return queueNames;
+//        List<String> queueNames = new ArrayList<>();
+//        for (AmqpQueue queue : queues) {
+//            queueNames.add(queue.getName());
+//        }
+//        return queueNames;
+        return new ArrayList<>(queues);
     }
 
     private List<String> getExchangeNames() {
-        return exchanges.stream().map(AmqpExchange::getName).collect(Collectors.toList());
+        return new ArrayList<>(exchanges);
     }
 
     private List<AmqpExchangeProperties> getBindingsData() {
@@ -543,6 +631,26 @@ public class PersistentExchange extends AbstractAmqpExchange {
         String[] nameArr = this.persistentTopic.getName().split("/");
         checkArgument(nameArr[nameArr.length - 1].equals(TOPIC_PREFIX + exchangeName),
                 "The exchange topic name does not conform to the rules(__amqp_exchange__exchangeName).");
+    }
+
+    @Override
+    public boolean isUnavailable() {
+        return isFenced && this.isClosingOrDeleting;
+    }
+
+    public CompletableFuture<Void> close() {
+        log.info("Start to close exchange {} in vhost {}.",
+                exchangeName, TopicName.get(persistentTopic.getName()).getNamespace());
+        this.isClosingOrDeleting = true;
+        if (this.messageReplicator != null) {
+            this.messageReplicator.stopReplicate();
+        }
+        if (this.persistentTopic != null) {
+            this.exchangeContainer.removeExchange(
+                    TopicName.get(persistentTopic.getName()).getNamespaceObject(), exchangeName);
+            return this.persistentTopic.close();
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
 }

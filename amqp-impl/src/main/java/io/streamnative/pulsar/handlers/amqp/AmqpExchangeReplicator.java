@@ -38,6 +38,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.impl.Backoff;
 import org.apache.pulsar.common.api.proto.CommandSubscribe;
+import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.util.FutureUtil;
 
 /**
  * Amqp exchange replicator, read entries from BookKeeper and process entries.
@@ -88,6 +90,7 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
     private final ConcurrentLinkedDeque<Position> markDeletePositionDeque = new ConcurrentLinkedDeque<>();
     private final Executor executorService = Executors.newSingleThreadExecutor(
             new DefaultThreadFactory("amqp-ex-router"));
+    private volatile boolean isFenced;
 
     protected AmqpExchangeReplicator(PersistentExchange persistentExchange) {
         this.persistentExchange = persistentExchange;
@@ -172,6 +175,13 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
         if (log.isDebugEnabled()) {
             log.debug("{} Read more entries.", name);
         }
+        if (isFenced) {
+            long waitTimeMs = backOff.next();
+            log.warn("Fenced the message router for exchange {} in vhost {}, try to recover in {} ms.",
+                    persistentExchange.getName(), TopicName.get(topic.getName()).getNamespace(), waitTimeMs);
+            scheduleRecoverTask(waitTimeMs);
+            return;
+        }
         int availablePermits = getAvailablePermits();
         if (availablePermits > 0) {
             if (HAVE_PENDING_READ_UPDATER.compareAndSet(this, FALSE, TRUE)) {
@@ -232,6 +242,10 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
             PENDING_SIZE_UPDATER.incrementAndGet(this);
             readProcess(entry.getRight(), entry.getLeft()).whenCompleteAsync((ignored, exception) -> {
                 if (exception != null) {
+                    if (FutureUtil.unwrapCompletionException(exception)
+                            instanceof ManagedLedgerException.ManagedLedgerFencedException) {
+                        isFenced = true;
+                    }
                     log.error("{} Error producing messages", name, exception);
                     markDeletePositions();
                     this.cursor.rewind();
@@ -345,6 +359,13 @@ public abstract class AmqpExchangeReplicator implements AsyncCallbacks.ReadEntri
             positions.add(position);
         }
         this.cursor.asyncDelete(positions, this, positions);
+    }
+
+    public void scheduleRecoverTask(long waitTimeMs) {
+        scheduledExecutorService.schedule(() -> {
+            this.isFenced = false;
+            this.readMoreEntries();
+        }, waitTimeMs, TimeUnit.MILLISECONDS);
     }
 
 }

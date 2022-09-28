@@ -16,7 +16,6 @@ package io.streamnative.pulsar.handlers.amqp;
 import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
-import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +24,6 @@ import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.bookkeeper.mledger.Position;
-import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
 import org.apache.qpid.server.protocol.v0_8.transport.BasicGetEmptyBody;
@@ -89,49 +87,76 @@ public final class MessageFetchContext {
 
         cursor.asyncReadEntries(1, new ReadEntriesCallback() {
             @Override
-            public void readEntriesComplete(List<Entry> list, Object o) {
-
-                if (list.size() <= 0) {
+            public void readEntriesComplete(List<Entry> entries, Object ctx) {
+                if (entries.size() <= 0) {
                     message.complete(null);
-                    return;
                 }
-                Entry index = list.get(0);
-                IndexMessage indexMessage = MessageConvertUtils.entryToIndexMessage(index);
-//                if (indexMessage == null) {
-//                    message.complete(Pair.of(index.getPosition(), null));
-//                    return;
-//                }
-                consumer.asyncGetQueue().thenApply(amqpQueue -> amqpQueue.readEntryAsync(
-                        indexMessage.getExchangeName(), indexMessage.getLedgerId(), indexMessage.getEntryId())
-                        .whenComplete((msg, ex) -> {
-                            if (ex == null) {
-                                try {
-                                    message.complete(Pair.of(index.getPosition(),
-                                            MessageConvertUtils.entryToAmqpBody(msg)));
-                                } catch (Exception e) {
-                                    log.error("Failed to convert entry to AMQP body", e);
-                                }
-//                                consumer.addUnAckMessages(indexMessage.getExchangeName(),
-//                                        (PositionImpl) index.getPosition(), (PositionImpl) msg.getPosition());
-                            } else {
-                                message.complete(Pair.of(index.getPosition(), null));
-                            }
-                            msg.release();
-                            index.release();
-                            indexMessage.recycle();
-                            context.recycle();
-                        })
-                ).exceptionally(throwable -> {
-                    log.error("Failed to get queue from queue container", throwable);
-                    return null;
-                });
+                try {
+                    message.complete(Pair.of(entries.get(0).getPosition(),
+                            MessageConvertUtils.entryToAmqpBody(entries.get(0))));
+                } catch (Exception e) {
+                    log.error("Failed to convert entry to AMQP body", e);
+                    message.complete(null);
+                } finally {
+                    for (Entry entry : entries) {
+                        if (entry != null) {
+                            entry.release();
+                        }
+                    }
+                }
             }
 
             @Override
-            public void readEntriesFailed(ManagedLedgerException e, Object o) {
+            public void readEntriesFailed(ManagedLedgerException exception, Object ctx) {
                 message.complete(null);
             }
         }, null, null);
+
+//        cursor.asyncReadEntries(1, new ReadEntriesCallback() {
+//            @Override
+//            public void readEntriesComplete(List<Entry> list, Object o) {
+//
+//                if (list.size() <= 0) {
+//                    message.complete(null);
+//                    return;
+//                }
+//                Entry index = list.get(0);
+//                IndexMessage indexMessage = MessageConvertUtils.entryToIndexMessage(index);
+////                if (indexMessage == null) {
+////                    message.complete(Pair.of(index.getPosition(), null));
+////                    return;
+////                }
+//                consumer.asyncGetQueue().thenApply(amqpQueue -> amqpQueue.readEntryAsync(
+//                        indexMessage.getExchangeName(), indexMessage.getLedgerId(), indexMessage.getEntryId())
+//                        .whenComplete((msg, ex) -> {
+//                            if (ex == null) {
+//                                try {
+//                                    message.complete(Pair.of(index.getPosition(),
+//                                            MessageConvertUtils.entryToAmqpBody(msg)));
+//                                } catch (Exception e) {
+//                                    log.error("Failed to convert entry to AMQP body", e);
+//                                }
+////                                consumer.addUnAckMessages(indexMessage.getExchangeName(),
+////                                        (PositionImpl) index.getPosition(), (PositionImpl) msg.getPosition());
+//                            } else {
+//                                message.complete(Pair.of(index.getPosition(), null));
+//                            }
+//                            msg.release();
+//                            index.release();
+//                            indexMessage.recycle();
+//                            context.recycle();
+//                        })
+//                ).exceptionally(throwable -> {
+//                    log.error("Failed to get queue from queue container", throwable);
+//                    return null;
+//                });
+//            }
+//
+//            @Override
+//            public void readEntriesFailed(ManagedLedgerException e, Object o) {
+//                message.complete(null);
+//            }
+//        }, null, null);
 
     }
 

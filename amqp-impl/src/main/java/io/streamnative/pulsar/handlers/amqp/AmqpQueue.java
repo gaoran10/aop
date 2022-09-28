@@ -101,4 +101,6 @@ public interface AmqpQueue {
     boolean isAutoDelete();
 
     Topic getTopic();
+
+    boolean isUnavailable();
 }

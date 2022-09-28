@@ -26,6 +26,7 @@ import org.apache.bookkeeper.mledger.impl.ManagedCursorContainer;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.pulsar.broker.service.BrokerService;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
+import org.apache.pulsar.common.naming.NamespaceName;
 import org.mockito.Mockito;
 import org.testng.annotations.Test;
 
@@ -34,6 +35,8 @@ import org.testng.annotations.Test;
  */
 @Slf4j
 public class TopicNameTest {
+
+    private NamespaceName namespaceName = NamespaceName.get("public", "default");
 
     @Test
     public void exchangeTopicNameValidate() {
@@ -49,8 +52,8 @@ public class TopicNameTest {
         Mockito.when(exchangeTopic1.getBrokerService()).thenReturn(brokerService);
         Mockito.when(managedLedger.getCursors()).thenReturn(new ManagedCursorContainer());
         try {
-            new PersistentExchange(
-                    exchangeName, exchangeType, exchangeTopic1, false, null);
+            new PersistentExchange(null, null,
+                    exchangeName, namespaceName, exchangeType, exchangeTopic1, false, null);
         } catch (IllegalArgumentException e) {
             fail("Failed to new PersistentExchange. errorMsg: " + e.getMessage());
         }
@@ -59,8 +62,8 @@ public class TopicNameTest {
         Mockito.when(exchangeTopic2.getName()).thenReturn(PersistentExchange.TOPIC_PREFIX + "_" + exchangeName);
         Mockito.when(exchangeTopic2.getManagedLedger()).thenReturn(managedLedger);
         try {
-            new PersistentExchange(
-                    exchangeName, exchangeType, exchangeTopic2, false, null);
+            new PersistentExchange(null, null,
+                    exchangeName, namespaceName, exchangeType, exchangeTopic2, false, null);
         } catch (IllegalArgumentException e) {
             assertNotNull(e);
             log.info("This is expected behavior.");
@@ -76,7 +79,7 @@ public class TopicNameTest {
         Mockito.when(queueTopic1.getName()).thenReturn(PersistentQueue.TOPIC_PREFIX + queueName);
         Mockito.when(queueTopic1.getManagedLedger()).thenReturn(managedLedger);
         try {
-            new PersistentQueue(
+            new PersistentQueue(null,
                     queueName, queueTopic1, 0, false, false, null);
         } catch (IllegalArgumentException e) {
             fail("Failed to new PersistentExchange. errorMsg: " + e.getMessage());
@@ -86,7 +89,7 @@ public class TopicNameTest {
         Mockito.when(queueTopic2.getName()).thenReturn(PersistentQueue.TOPIC_PREFIX + "_" + queueName);
         Mockito.when(queueTopic2.getManagedLedger()).thenReturn(managedLedger);
         try {
-            new PersistentQueue(
+            new PersistentQueue(null,
                     queueName, queueTopic2, 0, false, false, null);
         } catch (IllegalArgumentException e) {
             assertNotNull(e);

@@ -27,6 +27,8 @@ import io.streamnative.pulsar.handlers.amqp.AmqpMessageRouter;
 import io.streamnative.pulsar.handlers.amqp.AmqpQueueProperties;
 import io.streamnative.pulsar.handlers.amqp.ExchangeContainer;
 import io.streamnative.pulsar.handlers.amqp.IndexMessage;
+import io.streamnative.pulsar.handlers.amqp.QueueContainer;
+import io.streamnative.pulsar.handlers.amqp.common.exception.QueueUnavailableException;
 import io.streamnative.pulsar.handlers.amqp.metcis.QueueMetrics;
 import io.streamnative.pulsar.handlers.amqp.utils.ExchangeType;
 import io.streamnative.pulsar.handlers.amqp.utils.MessageConvertUtils;
@@ -80,11 +82,16 @@ public class PersistentQueue extends AbstractAmqpQueue {
     private PositionImpl lastLac;
     private final Map<String, Position> exchangeLastMarkDeletePos = new ConcurrentHashMap<>();
 
-    public PersistentQueue(String queueName, PersistentTopic indexTopic,
+    private final QueueContainer queueContainer;
+    private volatile boolean isFenced;
+    private volatile boolean isClosingOrDeleting;
+
+    public PersistentQueue(QueueContainer queueContainer, String queueName, PersistentTopic indexTopic,
                            long connectionId,
                            boolean exclusive, boolean autoDelete,
                            QueueMetrics queueMetrics) {
         super(queueName, true, connectionId, exclusive, autoDelete);
+        this.queueContainer = queueContainer;
         this.indexTopic = indexTopic;
         topicNameValidate();
         this.jsonMapper = new ObjectMapper();
@@ -94,6 +101,8 @@ public class PersistentQueue extends AbstractAmqpQueue {
         // TODO don't need cleanup exchange topic if write original message to queue
 //        this.indexTopic.getBrokerService().getPulsar().getExecutor()
 //                .schedule(this::exchangeClear, 5, TimeUnit.SECONDS);
+        this.isFenced = false;
+        this.isClosingOrDeleting = false;
     }
 
     @Override
@@ -124,8 +133,23 @@ public class PersistentQueue extends AbstractAmqpQueue {
     @Override
     public CompletableFuture<Void> writeMessageAsync(ByteBuf payload, List<KeyValue> messageKeyValues) {
         queueMetrics.writeInc();
+        if (isUnavailable()) {
+            queueMetrics.writeFailed();
+            return FutureUtil.failedFuture(
+                    new QueueUnavailableException(TopicName.get(indexTopic.getName()).getNamespace(), queueName));
+        }
         return amqpEntryWriter.publishMessage(MessageConvertUtils.entryToMessage(
                 payload, messageKeyValues, true))
+                .whenComplete((__, t) -> {
+                    if (t != null) {
+                        queueMetrics.writeFailed();
+                        if (FutureUtil.unwrapCompletionException(t)
+                                instanceof ManagedLedgerException.ManagedLedgerFencedException) {
+                            isFenced = true;
+                            close();
+                        }
+                    }
+                })
                 .thenApply(__ -> null);
     }
 
@@ -180,6 +204,10 @@ public class PersistentQueue extends AbstractAmqpQueue {
     @Override
     public CompletableFuture<Void> bindExchange(AmqpExchange exchange, AmqpMessageRouter router, String bindingKey,
                              Map<String, Object> arguments) {
+        if (isUnavailable()) {
+            return FutureUtil.failedFuture(
+                    new QueueUnavailableException(TopicName.get(indexTopic.getName()).getNamespace(), queueName));
+        }
         return super.bindExchange(exchange, router, bindingKey, arguments).thenApply(__ -> {
             updateQueueProperties();
             return null;
@@ -188,6 +216,9 @@ public class PersistentQueue extends AbstractAmqpQueue {
 
     @Override
     public void unbindExchange(AmqpExchange exchange) {
+        if (isUnavailable()) {
+            throw new QueueUnavailableException(TopicName.get(indexTopic.getName()).getNamespace(), queueName);
+        }
         super.unbindExchange(exchange);
         updateQueueProperties();
     }
@@ -312,6 +343,23 @@ public class PersistentQueue extends AbstractAmqpQueue {
         } else {
             this.indexTopic.getBrokerService().getPulsar().getExecutor().schedule(this::exchangeDelete, 5, TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public boolean isUnavailable() {
+        return this.isFenced || this.isClosingOrDeleting;
+    }
+
+    public CompletableFuture<Void> close() {
+        log.info("Start to close queue {} in vhost {}.",
+                queueName, TopicName.get(indexTopic.getName()).getNamespace());
+        this.isClosingOrDeleting = true;
+        if (this.indexTopic != null) {
+            this.queueContainer.removeQueue(
+                    TopicName.get(indexTopic.getName()).getNamespaceObject(), queueName);
+            return this.indexTopic.close();
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
 }

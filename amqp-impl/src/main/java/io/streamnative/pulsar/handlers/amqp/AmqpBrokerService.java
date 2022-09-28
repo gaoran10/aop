@@ -44,7 +44,7 @@ public class AmqpBrokerService {
         this.amqpStats = AmqpStats.create(enableMetrics);
         this.pulsarService = pulsarService;
         this.amqpTopicManager = new AmqpTopicManager(pulsarService);
-        this.exchangeContainer = new ExchangeContainer(amqpTopicManager, pulsarService, amqpStats);
+        this.exchangeContainer = new ExchangeContainer(this, amqpTopicManager, pulsarService, amqpStats);
         this.queueContainer = new QueueContainer(amqpTopicManager, pulsarService, exchangeContainer, amqpStats);
         this.exchangeService = new ExchangeServiceImpl(exchangeContainer);
         this.queueService = new QueueServiceImpl(exchangeContainer, queueContainer);
@@ -55,7 +55,7 @@ public class AmqpBrokerService {
         this.amqpStats = AmqpStats.create(true);
         this.pulsarService = pulsarService;
         this.amqpTopicManager = new AmqpTopicManager(pulsarService);
-        this.exchangeContainer = new ExchangeContainer(amqpTopicManager, pulsarService, amqpStats);
+        this.exchangeContainer = new ExchangeContainer(this, amqpTopicManager, pulsarService, amqpStats);
         this.queueContainer = new QueueContainer(amqpTopicManager, pulsarService, exchangeContainer, amqpStats);
         this.exchangeService = new ExchangeServiceImpl(exchangeContainer);
         this.queueService = new QueueServiceImpl(exchangeContainer, queueContainer);

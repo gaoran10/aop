@@ -35,11 +35,14 @@ import org.apache.pulsar.common.naming.NamespaceName;
 @Slf4j
 public class ExchangeContainer {
 
+    private final AmqpBrokerService amqpBrokerService;
     private AmqpTopicManager amqpTopicManager;
     private PulsarService pulsarService;
     private AmqpStats amqpStats;
 
-    protected ExchangeContainer(AmqpTopicManager amqpTopicManager, PulsarService pulsarService, AmqpStats amqpStats) {
+    protected ExchangeContainer(AmqpBrokerService amqpBrokerService,
+                                AmqpTopicManager amqpTopicManager, PulsarService pulsarService, AmqpStats amqpStats) {
+        this.amqpBrokerService = amqpBrokerService;
         this.amqpTopicManager = amqpTopicManager;
         this.pulsarService = pulsarService;
         this.amqpStats = amqpStats;
@@ -124,8 +127,9 @@ public class ExchangeContainer {
                                     new RuntimeException("Unknown type for exchange " + exchangeName));
                             removeExchangeFuture(namespaceName, exchangeName, amqpExchangeCompletableFuture);
                         }
-                        PersistentExchange amqpExchange = new PersistentExchange(exchangeName,
-                                amqpExchangeType, persistentTopic, autoDelete,
+                        PersistentExchange amqpExchange = new PersistentExchange(
+                                this, amqpBrokerService.getQueueContainer(), exchangeName,
+                                namespaceName, amqpExchangeType, persistentTopic, autoDelete,
                                 amqpStats.addExchangeMetrics(namespaceName.getLocalName(), exchangeName));
                         try {
                             amqpExchange.recover(properties, this, namespaceName);
@@ -150,7 +154,7 @@ public class ExchangeContainer {
      * @param namespaceName namespace name in pulsar
      * @param exchangeName  name of exchange
      */
-    public void deleteExchange(NamespaceName namespaceName, String exchangeName) {
+    public void removeExchange(NamespaceName namespaceName, String exchangeName) {
         if (StringUtils.isEmpty(exchangeName)) {
             return;
         }

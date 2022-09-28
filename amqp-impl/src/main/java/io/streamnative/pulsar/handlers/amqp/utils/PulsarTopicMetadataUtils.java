@@ -14,10 +14,14 @@
 package io.streamnative.pulsar.handlers.amqp.utils;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
+import org.apache.pulsar.common.util.FutureUtil;
 
 /**
  * Pulsar topic metadata utils.

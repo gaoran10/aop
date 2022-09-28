@@ -410,6 +410,10 @@ public class AmqpChannel implements ExtensionServerChannelMethodProcessor {
                 if (amqpQueue == null) {
                     closeChannel(ErrorCodes.NOT_FOUND, "No such queue: '" + queue.toString() + "'");
                 } else {
+                    if (amqpQueue.isUnavailable()) {
+                        closeChannel(INTERNAL_ERROR, "The queue: '" + queue + " is closing or deleting.'");
+                        return;
+                    }
                     PersistentTopic indexTopic = ((PersistentQueue) amqpQueue).getIndexTopic();
                     subscribe(getConsumerTag(consumerTag), queue.toString(), indexTopic, noAck, exclusive, nowait);
                 }

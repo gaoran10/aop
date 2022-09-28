@@ -152,4 +152,6 @@ public interface AmqpExchange {
 
     Map<String, AmqpMessageRouter> getRouters();
 
+    boolean isUnavailable();
+
 }

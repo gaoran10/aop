@@ -24,6 +24,7 @@ import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import lombok.Cleanup;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
@@ -80,7 +81,7 @@ public class E2EDemo {
         keyList.add("a.b.prediction.deviceprint");
         keyList.add("x.y.prediction.fraud_risk_grouper");
         keyList.add("FinalizingQueue");
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 100; i++) {
             String key = "key-" + i;
             keyList.add(key);
             bindAndConsume(key, Lists.newArrayList(Pair.of(predicationInput, key + ".*")));
@@ -98,6 +99,7 @@ public class E2EDemo {
             rateLimiter.acquire();
             int index = (int) (messageIndex % keyList.size());
             String key;
+            byte[] data = RandomUtils.nextBytes(15000);
             if (index == 0) {
                 AMQP.BasicProperties.Builder basicProperties = new AMQP.BasicProperties().builder();
                 Map<String, Object> headers = new HashMap<>();
@@ -105,7 +107,7 @@ public class E2EDemo {
                 basicProperties.headers(headers);
                 key = "a.b.prediction.deviceprint";
                 String msg = "[" + messageIndex + "] with key " + key;
-                channel.basicPublish(predicationInput, key, basicProperties.build(), msg.getBytes());
+                channel.basicPublish(predicationInput, key, basicProperties.build(), data);
             } else if (index == 1) {
                 AMQP.BasicProperties.Builder basicProperties = new AMQP.BasicProperties().builder();
                 Map<String, Object> headers = new HashMap<>();
@@ -113,7 +115,7 @@ public class E2EDemo {
                 basicProperties.headers(headers);
                 key = "x.y.prediction.fraud_risk_grouper";
                 String msg = "[" + messageIndex + "] with key " + key;
-                channel.basicPublish(predicationInput, key, basicProperties.build(), msg.getBytes());
+                channel.basicPublish(predicationInput, key, basicProperties.build(), data);
             } else if (index == 2) {
                 AMQP.BasicProperties.Builder basicProperties = new AMQP.BasicProperties().builder();
                 Map<String, Object> headers = new HashMap<>();
@@ -121,14 +123,14 @@ public class E2EDemo {
                 basicProperties.headers(headers);
                 key = "FinalizingQueue";
                 String msg = "[" + messageIndex + "] with key " + key;
-                channel.basicPublish(predicationInput, key, basicProperties.build(), msg.getBytes());
+                channel.basicPublish(predicationInput, key, basicProperties.build(), data);
             } else {
                 key = keyList.get(index) + ".a";
                 String msg = "[" + messageIndex + "] with key " + key;
-                channel.basicPublish(predicationInput, key, null, msg.getBytes());
+                channel.basicPublish(predicationInput, key, null, data);
             }
             messageIndex++;
-            if (messageIndex % 1000 == 0) {
+            if (messageIndex % 100000 == 0) {
                 System.out.println("total send messages " + messageIndex);
             }
         }
@@ -148,8 +150,8 @@ public class E2EDemo {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
                 channel.basicAck(envelope.getDeliveryTag(), false);
-                if (receiveMsg.incrementAndGet() == 1) {
-                    System.out.println("[" + queue + "] receive msg");
+                if (receiveMsg.incrementAndGet() % 1000 == 0) {
+                    System.out.println("The queue [" + queue + "] receive " + receiveMsg.get() + " msgs");
                 }
             }
         });
@@ -158,10 +160,21 @@ public class E2EDemo {
 
     public Connection getConnection() throws Exception {
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("localhost");
-        factory.setPort(5682);
+        factory.setHost("use1-test1-79961afb-efaa-46a6-83d3-d03c7e349d27.aws-use1-pindrop-test-snc.o-z5szi.pulsar.pindrop.dev");
+        factory.setPort(5671);
+        factory.setUsername("data");
+        factory.setPassword("BtXXRbf8VGZDePkq");
+        factory.useSslProtocol("TLSv1.2");
+        factory.setVirtualHost("vhost-sn");
         factory.setConnectionTimeout(1000 * 60);
         return factory.newConnection();
     }
+
+//    public Connection getConnection() throws Exception {
+//        ConnectionFactory factory = new ConnectionFactory();
+//        factory.setPort(5682);
+//        factory.setConnectionTimeout(1000 * 60);
+//        return factory.newConnection();
+//    }
 
 }

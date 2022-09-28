@@ -15,11 +15,10 @@
 package io.streamnative.pulsar.handlers.amqp;
 
 import io.streamnative.pulsar.handlers.amqp.impl.PersistentQueue;
+import io.streamnative.pulsar.handlers.amqp.metcis.AmqpStats;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-
-import io.streamnative.pulsar.handlers.amqp.metcis.AmqpStats;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -93,19 +92,19 @@ public class QueueContainer {
                 if (throwable != null) {
                     log.error("[{}][{}] Failed to get queue topic.", namespaceName, queueName, throwable);
                     queueCompletableFuture.completeExceptionally(throwable);
-                    removeQueueFuture(namespaceName, queueName);
+                    removeQueueFuture(namespaceName, queueName, queueCompletableFuture);
                 } else {
                     if (null == topic) {
                         log.warn("[{}][{}] Queue topic did not exist.", namespaceName, queueName);
                         queueCompletableFuture.complete(null);
-                        removeQueueFuture(namespaceName, queueName);
+                        removeQueueFuture(namespaceName, queueName, queueCompletableFuture);
                     } else {
                         // recover metadata if existed
                         PersistentTopic persistentTopic = (PersistentTopic) topic;
                         Map<String, String> properties = persistentTopic.getManagedLedger().getProperties();
 
                         // TODO: reset connectionId, exclusive and autoDelete
-                        PersistentQueue amqpQueue = new PersistentQueue(queueName, persistentTopic,
+                        PersistentQueue amqpQueue = new PersistentQueue(this, queueName, persistentTopic,
                                 connectionId, exclusive, autoDelete,
                                 amqpStats.addQueueMetrics(namespaceName.getLocalName(), queueName));
                         try {
@@ -115,7 +114,7 @@ public class QueueContainer {
                             log.error("[{}][{}] Failed to recover routers for queue from properties.",
                                     namespaceName, queueName, e);
                             queueCompletableFuture.completeExceptionally(e);
-                            removeQueueFuture(namespaceName, queueName);
+                            removeQueueFuture(namespaceName, queueName, queueCompletableFuture);
                             return;
                         }
                         queueCompletableFuture.complete(amqpQueue);
@@ -132,16 +131,20 @@ public class QueueContainer {
      * @param namespaceName namespace name in pulsar
      * @param queueName name of queue
      */
-    public void deleteQueue(NamespaceName namespaceName, String queueName) {
+    public void removeQueue(NamespaceName namespaceName, String queueName) {
         if (StringUtils.isEmpty(queueName)) {
             return;
         }
-        removeQueueFuture(namespaceName, queueName);
+        removeQueueFuture(namespaceName, queueName, null);
     }
 
-    private void removeQueueFuture(NamespaceName namespaceName, String queueName) {
+    private void removeQueueFuture(NamespaceName namespaceName, String queueName, CompletableFuture<AmqpQueue> future) {
         if (queueMap.containsKey(namespaceName)) {
-            queueMap.get(namespaceName).remove(queueName);
+            if (future != null) {
+                queueMap.get(namespaceName).remove(queueName, future);
+            } else {
+                queueMap.get(namespaceName).remove(queueName);
+            }
         }
         amqpStats.deleteQueueMetrics(namespaceName.getLocalName(), queueName);
     }
