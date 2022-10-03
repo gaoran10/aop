@@ -248,6 +248,11 @@ public class PersistentQueue extends AbstractAmqpQueue {
             CompletableFuture<AmqpExchange> amqpExchangeCompletableFuture =
                     exchangeContainer.asyncGetExchange(namespaceName, exchangeName, false, null);
             amqpExchangeCompletableFuture.whenComplete((amqpExchange, throwable) -> {
+                if (throwable != null) {
+                    log.error("Failed to recover queue, failed to get exchange {} for queue {} in vhost {}.",
+                            exchangeName, queueName, namespaceName, throwable);
+                    return;
+                }
                 AmqpMessageRouter messageRouter = AbstractAmqpMessageRouter.
                         generateRouter(ExchangeType.value(amqpQueueProperty.getType().toString()));
                 messageRouter.setQueue(this);
