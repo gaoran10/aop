@@ -5,7 +5,7 @@ import io.prometheus.client.Histogram;
 import lombok.Getter;
 
 
-public interface QueueMetrics {
+public interface QueueMetrics extends MetadataMetrics {
 
     String getVhost();
 
@@ -86,6 +86,11 @@ public interface QueueMetrics {
                 .labelNames(LABELS)
                 .help("Queue ack counter.").register();
 
+        static final Counter metadataUpdateFailedCounter = Counter.build()
+                .name("exchange_metadata_update_counter")
+                .labelNames(LABELS)
+                .help("Exchange metadata update counter").register();
+
         public QueueMetricsImpl(String vhost, String queueName) {
             this.vhost = vhost;
             this.queueName = queueName;
@@ -142,6 +147,11 @@ public interface QueueMetrics {
         @Override
         public void ackInc(double count) {
             ackCounter.labels(labelValues).inc(count);
+        }
+
+        @Override
+        public void metadataUpdateFailedInc() {
+            metadataUpdateFailedCounter.labels(labelValues).inc();
         }
 
         //        public void collect() {
@@ -225,6 +235,11 @@ public interface QueueMetrics {
 
         @Override
         public void ackInc(double count) {
+
+        }
+
+        @Override
+        public void metadataUpdateFailedInc() {
 
         }
 

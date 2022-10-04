@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import io.streamnative.pulsar.handlers.amqp.common.exception.AoPException;
+import io.streamnative.pulsar.handlers.amqp.metcis.MetadataMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
@@ -35,7 +36,8 @@ public class PulsarTopicMetadataUtils {
      * @param properties key-values data
      * @param name       exchange or queue name
      */
-    public static void updateMetaData(PersistentTopic topic, Map<String, String> properties, String name) {
+    public static void updateMetaData(PersistentTopic topic, Map<String, String> properties, String name,
+                                      MetadataMetrics metadataMetrics) {
         if (null == topic) {
             log.error("name:{}, topic is null.", name);
             return;
@@ -50,6 +52,7 @@ public class PulsarTopicMetadataUtils {
 
             @Override
             public void updatePropertiesFailed(ManagedLedgerException e, Object o) {
+                metadataMetrics.metadataUpdateFailedInc();
                 log.error("[{}] update properties failed message: {}, properties:{}",
                         name, e.getMessage(), properties);
             }

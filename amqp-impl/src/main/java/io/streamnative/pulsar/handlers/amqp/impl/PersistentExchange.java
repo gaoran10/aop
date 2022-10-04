@@ -516,7 +516,7 @@ public class PersistentExchange extends AbstractAmqpExchange {
             log.error("[{}] covert map of routers to String error: {}", exchangeName, e.getMessage());
             return;
         }
-        PulsarTopicMetadataUtils.updateMetaData(this.persistentTopic, properties, exchangeName);
+        PulsarTopicMetadataUtils.updateMetaData(this.persistentTopic, properties, exchangeName, exchangeMetrics);
     }
 
     private List<String> getQueueNames() {

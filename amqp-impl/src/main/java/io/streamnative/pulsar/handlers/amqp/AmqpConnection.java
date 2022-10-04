@@ -370,7 +370,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
             log.debug("RECV ConnectionOpen[virtualHost: {} capabilities: {} insist: {} ]",
                 virtualHost, capabilities, insist);
         }
-
+        this.amqpBrokerService.getAmqpStats().connectionOpenInc();
         assertState(ConnectionState.AWAIT_OPEN);
 
         boolean isDefaultNamespace = false;
@@ -414,6 +414,7 @@ public class AmqpConnection extends AmqpCommandDecoder implements ServerMethodPr
             log.debug("RECV ConnectionClose[ replyCode: {} replyText: {} classId: {} methodId: {} ]",
                 replyCode, replyText, classId, methodId);
         }
+        this.amqpBrokerService.getAmqpStats().connectionCloseInc();
 
         try {
             if (orderlyClose.compareAndSet(false, true)) {

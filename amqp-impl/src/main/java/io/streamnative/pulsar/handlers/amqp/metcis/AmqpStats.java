@@ -1,6 +1,7 @@
 package io.streamnative.pulsar.handlers.amqp.metcis;
 
 
+import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 
 import java.util.HashMap;
@@ -12,6 +13,10 @@ public interface AmqpStats {
     void connectionInc(String vhost);
 
     void connectionDec(String vhost);
+
+    void connectionOpenInc();
+
+    void connectionCloseInc();
 
     ExchangeMetrics addExchangeMetrics(String vhost, String exchangeName);
 
@@ -43,6 +48,14 @@ public interface AmqpStats {
                 .labelNames("vhost")
                 .help("Queue count").register();
 
+        static final Counter connectionOpenCounter = Counter.build()
+                .name("amqp_connection_open_counter")
+                .help("Amqp connection open counter.").register();
+
+        static final Counter connectionCloseCounter = Counter.build()
+                .name("amqp_connection_close_counter")
+                .help("Amqp connection close counter.").register();
+
         public AmqpStatsImpl(boolean enableMetrics) {
             this.enableMetrics = enableMetrics;
         }
@@ -58,6 +71,16 @@ public interface AmqpStats {
                 return metrics;
             });
             updateVhostGauge();
+        }
+
+        @Override
+        public void connectionOpenInc() {
+            connectionOpenCounter.inc();
+        }
+
+        @Override
+        public void connectionCloseInc() {
+            connectionCloseCounter.inc();
         }
 
         public ExchangeMetrics addExchangeMetrics(String vhost, String exchangeName) {
@@ -161,6 +184,16 @@ public interface AmqpStats {
 
         @Override
         public void deleteQueueMetrics(String vhost, String queueName) {
+
+        }
+
+        @Override
+        public void connectionOpenInc() {
+
+        }
+
+        @Override
+        public void connectionCloseInc() {
 
         }
 

@@ -4,7 +4,7 @@ import io.prometheus.client.Counter;
 import io.prometheus.client.Histogram;
 import lombok.Getter;
 
-public interface ExchangeMetrics {
+public interface ExchangeMetrics extends MetadataMetrics {
 
     String getVhost();
 
@@ -108,6 +108,11 @@ public interface ExchangeMetrics {
                 .labelNames(LABELS)
                 .help("Exchange route latency").register();
 
+        static final Counter metadataUpdateFailedCounter = Counter.build()
+                .name("exchange_metadata_update_counter")
+                .labelNames(LABELS)
+                .help("Exchange metadata update counter").register();
+
         public ExchangeMetricsImpl(String vhost, String exchangeName) {
             this.vhost = vhost;
             this.exchangeName = exchangeName;
@@ -173,7 +178,12 @@ public interface ExchangeMetrics {
             timer.observeDuration();
         }
 
-//        public void collect() {
+        @Override
+        public void metadataUpdateFailedInc() {
+            metadataUpdateFailedCounter.labels(labelValues).inc();
+        }
+
+        //        public void collect() {
 //            writeCounter.collect();
 ////            writeSuccessCounter.collect();
 //            writeFailedCounter.collect();
@@ -270,7 +280,12 @@ public interface ExchangeMetrics {
 
         }
 
-//        @Override
+        @Override
+        public void metadataUpdateFailedInc() {
+
+        }
+
+        //        @Override
 //        public void collect() {
 //
 //        }

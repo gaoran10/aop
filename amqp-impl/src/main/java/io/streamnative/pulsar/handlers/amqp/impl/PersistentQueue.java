@@ -273,7 +273,7 @@ public class PersistentQueue extends AbstractAmqpQueue {
             log.error("[{}] Failed to covert map of routers to String", queueName, e);
             return;
         }
-        PulsarTopicMetadataUtils.updateMetaData(this.indexTopic, properties, queueName);
+        PulsarTopicMetadataUtils.updateMetaData(this.indexTopic, properties, queueName, queueMetrics);
     }
 
     public static String getQueueTopicName(NamespaceName namespaceName, String queueName) {
