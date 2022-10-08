@@ -144,6 +144,7 @@ public abstract class AmqpProtocolHandlerTestBase {
         amqpConfig.setManagedLedgerCacheEvictionFrequency(0.001);
         amqpConfig.setManagedLedgerCacheEvictionTimeThresholdMillis(1000000);
         amqpConfig.setManagedLedgerCacheSizeMB(500);
+        amqpConfig.setAmqpEnableMetrics(true);
 
         this.conf = amqpConfig;
     }

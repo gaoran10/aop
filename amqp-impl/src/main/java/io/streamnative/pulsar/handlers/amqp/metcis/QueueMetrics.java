@@ -87,9 +87,9 @@ public interface QueueMetrics extends MetadataMetrics {
                 .help("Queue ack counter.").register();
 
         static final Counter metadataUpdateFailedCounter = Counter.build()
-                .name("exchange_metadata_update_counter")
+                .name("queue_metadata_update_counter")
                 .labelNames(LABELS)
-                .help("Exchange metadata update counter").register();
+                .help("Queue metadata update counter").register();
 
         public QueueMetricsImpl(String vhost, String queueName) {
             this.vhost = vhost;
