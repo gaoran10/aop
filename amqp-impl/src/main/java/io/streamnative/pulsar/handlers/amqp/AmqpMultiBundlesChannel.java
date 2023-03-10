@@ -87,7 +87,7 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
         params.setArguments(FieldTable.convertToMap(arguments));
 
         getAmqpAdmin().exchangeDeclare(
-                connection.getNamespaceName().toString(), exchange.toString(), params).thenAccept(__ -> {
+                connection.getNamespaceName(), exchange.toString(), params).thenAccept(__ -> {
             if (!nowait) {
                 connection.writeFrame(
                         connection.getMethodRegistry().createExchangeDeclareOkBody().generateFrame(channelId));
@@ -117,7 +117,7 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
         params.setArguments(FieldTable.convertToMap(arguments));
 
         getAmqpAdmin().queueDeclare(
-                connection.getNamespaceName().toString(), queue.toString(), params).thenAccept(amqpQueue -> {
+                connection.getNamespaceName(), queue.toString(), params).thenAccept(amqpQueue -> {
 //            setDefaultQueue(amqpQueue);
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             QueueDeclareOkBody responseBody = methodRegistry.createQueueDeclareOkBody(
@@ -142,7 +142,7 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
         params.setRoutingKey(bindingKey != null ? bindingKey.toString() : null);
         params.setArguments(FieldTable.convertToMap(argumentsTable));
 
-        getAmqpAdmin().queueBind(connection.getNamespaceName().toString(),
+        getAmqpAdmin().queueBind(connection.getNamespaceName(),
                 exchange.toString(), queue.toString(), params).thenAccept(__ -> {
             MethodRegistry methodRegistry = connection.getMethodRegistry();
             AMQMethodBody responseBody = methodRegistry.createQueueBindOkBody();
@@ -162,7 +162,7 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
                     queue, exchange, bindingKey, arguments);
         }
 
-        getAmqpAdmin().queueUnbind(connection.getNamespaceName().toString(), exchange.toString(),
+        getAmqpAdmin().queueUnbind(connection.getNamespaceName(), exchange.toString(),
                 queue.toString(), bindingKey.toString()).thenAccept(__ -> {
             AMQMethodBody responseBody = connection.getMethodRegistry().createQueueUnbindOkBody();
             connection.writeFrame(responseBody.generateFrame(channelId));
@@ -222,19 +222,19 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
             exchangeParams.setAutoDelete(false);
             exchangeParams.setDurable(true);
             exchangeParams.setPassive(false);
-            getAmqpAdmin().exchangeDeclare(connection.getNamespaceName().toString(),
+            getAmqpAdmin().exchangeDeclare(connection.getNamespaceName(),
                     AbstractAmqpExchange.DEFAULT_EXCHANGE_DURABLE, exchangeParams
             ).thenCompose(__ -> {
                 QueueDeclareParams queueParams = new QueueDeclareParams();
                 queueParams.setDurable(true);
                 queueParams.setExclusive(false);
                 queueParams.setAutoDelete(false);
-                return getAmqpAdmin().queueDeclare(connection.getNamespaceName().toString(), routingKey.toString(),
+                return getAmqpAdmin().queueDeclare(connection.getNamespaceName(), routingKey.toString(),
                         queueParams);
             }).thenCompose(__ -> {
                 BindingParams bindingParams = new BindingParams();
                 bindingParams.setRoutingKey(routingKey.toString());
-                return getAmqpAdmin().queueBind(connection.getNamespaceName().toString(),
+                return getAmqpAdmin().queueBind(connection.getNamespaceName(),
                         AbstractAmqpExchange.DEFAULT_EXCHANGE_DURABLE, routingKey.toString(), bindingParams);
             }).thenRun(() -> {
                 MessagePublishInfo info =
@@ -409,7 +409,7 @@ public class AmqpMultiBundlesChannel extends AmqpChannel {
 
     private String getTopicName(String topicPrefix, String name) {
         return TopicDomain.persistent + "://"
-                + connection.getAmqpConfig().getAmqpTenant() + "/"
+                + connection.getNamespaceName().getTenant() + "/"
                 + connection.getNamespaceName().getLocalName() + "/"
                 + topicPrefix + name;
     }
