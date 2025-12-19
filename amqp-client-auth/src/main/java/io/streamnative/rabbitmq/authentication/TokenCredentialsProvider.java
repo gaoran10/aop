@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class TokenCredentialsProvider implements CredentialsProvider {
+
+    private static final String JOSE_HEADER_UNSECURED_ENCODED = "eyJhbGciOiJub25lIn0";
     private final Supplier<String> tokenSupplier;
     private String token;
     private Jwt<Header, Claims> jwt;
@@ -40,10 +42,18 @@ public class TokenCredentialsProvider implements CredentialsProvider {
 
     private void load(Supplier<String> tokenSupplier) {
         String token = tokenSupplier.get();
-        int i = token.lastIndexOf('.');
-        String withoutSignature = token.substring(0, i + 1);
-        this.jwt = Jwts.parserBuilder().build().parseClaimsJwt(withoutSignature);
+        this.jwt = Jwts.parser().unsecured().build().parseClaimsJwt(transformToUnsecuredJwt(token));
         this.token = token;
+    }
+
+    public static String transformToUnsecuredJwt(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("Invalid JWT token");
+        }
+        StringBuilder sb = new StringBuilder(128);
+        sb.append(JOSE_HEADER_UNSECURED_ENCODED).append('.').append(parts[1]).append('.');
+        return sb.toString();
     }
 
     @Override
