@@ -43,6 +43,7 @@ import javax.jms.JMSException;
 import javax.jms.Session;
 import javax.jms.TemporaryQueue;
 import javax.naming.NamingException;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.qpid.server.model.Port;
@@ -59,12 +60,11 @@ import org.apache.qpid.test.utils.tls.KeyCertificatePair;
 import org.apache.qpid.test.utils.tls.PrivateKeyEntry;
 import org.apache.qpid.test.utils.tls.TlsResource;
 import org.apache.qpid.test.utils.tls.TlsResourceBuilder;
-import org.eclipse.jetty.server.Request;
+import org.eclipse.jetty.ee8.nested.AbstractHandler;
+import org.eclipse.jetty.ee8.nested.ContextHandler;
+import org.eclipse.jetty.ee8.nested.HandlerCollection;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.handler.ContextHandler;
-import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.hamcrest.Matchers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -146,7 +146,7 @@ public class AuthenticationTest extends JmsTestBase
         createContext(_crlFile);
         createContext(_emptyCrlFile);
         createContext(_intermediateCrlFile);
-        CRL_SERVER.setHandler(HANDLERS);
+        CRL_SERVER.setHandler(HANDLERS.getServer());
         CRL_SERVER.start();
         crlHttpPort = connector.getLocalPort();
 
@@ -842,9 +842,9 @@ public class AuthenticationTest extends JmsTestBase
         }
 
         @Override
-        public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
-                throws IOException
-        {
+        public void handle(String s, org.eclipse.jetty.ee8.nested.Request request,
+                           HttpServletRequest httpServletRequest,
+                           HttpServletResponse response) throws IOException, ServletException {
             final byte[] crlBytes = Files.readAllBytes(crlPath);
             response.setStatus(HttpServletResponse.SC_OK);
             try (final OutputStream responseBody = response.getOutputStream())
